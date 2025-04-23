@@ -6,10 +6,22 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "framer-motion"
 
+// Store chat history outside the component to persist across sessions
+let chatHistory: Message[] = [
+  {
+    role: "assistant",
+    content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
+  }
+];
+
 type Message = {
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "system"
   content: string
 }
+
+// Mistral AI configuration with valid API key
+const MISTRAL_API_KEY = "0zjmsSJLjr0dvpgoN7l0ivkBCDQ5DgtL";
+const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 
 export function Chatbot({ 
   isExpanded = false,
@@ -19,20 +31,7 @@ export function Chatbot({
   onClose?: () => void 
 }) {
   const [expanded, setExpanded] = useState(isExpanded)
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "I've analyzed your document and extracted 24 requirements."
-    },
-    {
-      role: "user",
-      content: "Can you categorize them by priority?"
-    },
-    {
-      role: "assistant",
-      content: "I've categorized them using MoSCoW prioritization:\n• Must-have: 8 requirements\n• Should-have: 10 requirements\n• Could-have: 4 requirements\n• Won't-have: 2 requirements"
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>(chatHistory)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [files, setFiles] = useState<File[]>([])
@@ -40,10 +39,31 @@ export function Chatbot({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
+  // Reset chat when opened
+  useEffect(() => {
+    if (isExpanded) {
+      // If chatHistory is empty (first time), add initial message
+      if (chatHistory.length === 0) {
+        chatHistory = [
+          {
+            role: "assistant",
+            content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
+          }
+        ];
+      }
+      setMessages(chatHistory);
+    }
+  }, [isExpanded]);
+  
   // Set expanded state from props
   useEffect(() => {
     setExpanded(isExpanded)
   }, [isExpanded])
+
+  // Update chat history when messages change
+  useEffect(() => {
+    chatHistory = messages;
+  }, [messages]);
 
   // Function to handle file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,53 +98,121 @@ export function Chatbot({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Simulate typing indicator
-  useEffect(() => {
-    if (isTyping) {
-      const timeout = setTimeout(() => {
-        setIsTyping(false)
-      }, 2000)
+  // Call Mistral AI API
+  const callMistralAPI = async (messageHistory: Message[]) => {
+    try {
+      // Format messages for API
+      const formattedMessages = messageHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
       
-      return () => clearTimeout(timeout)
+      // Call Mistral API with fetch
+      const response = await fetch(MISTRAL_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${MISTRAL_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "mistral-small",
+          messages: formattedMessages,
+          temperature: 0.7,
+          top_p: 1,
+          max_tokens: 800
+        })
+      });
+      
+      if (!response.ok) {
+        console.error(`API error: ${response.status}`);
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error("Error calling Mistral API:", error);
+      return "I'm having trouble connecting to my knowledge base. Please try again in a moment. If you have specific requirements questions, I'd still be happy to assist you with my general knowledge about requirements engineering.";
     }
-  }, [isTyping])
+  };
 
   // Handle sending a message
-  const handleSend = () => {
-    if (!input.trim() && files.length === 0) return
+  const handleSend = async () => {
+    if (!input.trim() && files.length === 0) return;
     
-    // Add user message
+    // Add user message for text input
     if (input.trim()) {
-      setMessages(prev => [...prev, { role: "user", content: input }])
+      const userMessage = { role: "user" as const, content: input };
+      setMessages(prev => [...prev, userMessage]);
+      setInput("");
+      
+      // Start typing indicator
+      setIsTyping(true);
+      
+      // Prepare messages for API call
+      const updatedMessages = [...chatHistory, userMessage];
+      
+      // Call Mistral API
+      try {
+        const aiResponse = await callMistralAPI(updatedMessages);
+        
+        // Add AI response
+        const assistantMessage = { role: "assistant" as const, content: aiResponse };
+        setMessages(prev => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error("Error getting response:", error);
+        // Add fallback response
+        const assistantMessage = { 
+          role: "assistant" as const, 
+          content: "I apologize, but I'm having trouble processing your request at the moment. Let me know if you'd like to try again or have a different question about requirements engineering." 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } finally {
+        setIsTyping(false);
+      }
     }
     
-    setInput("")
-    
-    // Reset files after sending
+    // Handle file uploads
     if (files.length > 0) {
-      const fileNames = files.map(f => f.name).join(", ")
-      setMessages(prev => [...prev, { 
-        role: "user", 
-        content: `I've uploaded: ${fileNames}` 
-      }])
-      setFiles([])
+      const fileNames = files.map(f => f.name).join(", ");
+      const fileUploadMessage = { 
+        role: "user" as const, 
+        content: `I've uploaded the following files: ${fileNames}`
+      };
+      
+      setMessages(prev => [...prev, fileUploadMessage]);
+      
+      // Start typing indicator
+      setIsTyping(true);
+      
+      // Prepare message about the uploaded files for the AI
+      const updatedMessages = [...chatHistory, fileUploadMessage];
+      
+      // Call Mistral API with context about the files
+      try {
+        const aiResponse = await callMistralAPI(updatedMessages);
+        
+        // Add AI response
+        const assistantMessage = { 
+          role: "assistant" as const, 
+          content: aiResponse
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error("Error getting response for files:", error);
+        // Add fallback response
+        const assistantMessage = { 
+          role: "assistant" as const, 
+          content: "I've received your files. While I can't directly analyze their contents at the moment, I can help you extract and organize requirements if you tell me about what they contain." 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } finally {
+        setFiles([]);
+        setIsTyping(false);
+      }
     }
-
-    // Simulate assistant typing
-    setIsTyping(true)
-    
-    // Simulate assistant response after delay
-    setTimeout(() => {
-      setMessages(prev => [
-        ...prev, 
-        { 
-          role: "assistant", 
-          content: "I've received your message. How else can I help with your requirements today?" 
-        }
-      ])
-      setIsTyping(false)
-    }, 2000)
-  }
+  };
 
   // Handle key press (Enter to send)
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -142,6 +230,16 @@ export function Chatbot({
   // Handle click on file button
   const handleFileButtonClick = () => {
     fileInputRef.current?.click()
+  }
+
+  // Function to clear chat history
+  const clearChat = () => {
+    const initialMessage = {
+      role: "assistant" as const,
+      content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
+    };
+    chatHistory = [initialMessage];
+    setMessages([initialMessage]);
   }
 
   return (
@@ -164,11 +262,26 @@ export function Chatbot({
             <div className="flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
               <div className="flex items-center gap-2">
                 <Brain className="h-6 w-6 text-primary" />
-                <h3 className="font-semibold">ReqAI Assistant</h3>
+                <h3 className="font-semibold">
+                  ReqAI Assistant 
+                  <span className="text-xs text-muted-foreground ml-1">
+                    (Powered by Mistral AI)
+                  </span>
+                </h3>
               </div>
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs"
+                  onClick={clearChat}
+                >
+                  Clear Chat
+                </Button>
+                <Button variant="ghost" size="icon" onClick={onClose}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Chat Messages */}
@@ -183,7 +296,7 @@ export function Chatbot({
                   key={index}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
+                  transition={{ duration: 0.3, delay: 0.05 }}
                   className={cn(
                     "p-3 rounded-lg max-w-[80%]",
                     message.role === "assistant" 
@@ -277,6 +390,7 @@ export function Chatbot({
                     size="icon" 
                     className="absolute right-1 top-1 h-8 w-8 bg-primary hover:bg-primary/90"
                     onClick={handleSend}
+                    disabled={isTyping || (!input.trim() && files.length === 0)}
                   >
                     <Send className="h-4 w-4" />
                   </Button>
