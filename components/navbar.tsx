@@ -9,6 +9,7 @@ import { Menu, Brain, Sparkles } from "lucide-react"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,6 +19,35 @@ export function Navbar() {
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
+
+  // Add smooth scroll function for navigation
+  const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string, closeSheet = false) => {
+    e.preventDefault()
+    
+    // Close mobile nav sheet if needed
+    if (closeSheet) {
+      setIsSheetOpen(false)
+    }
+    
+    // If href is # or empty, scroll to top
+    if (href === "#" || href === "") {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      })
+      return
+    }
+    
+    // Otherwise scroll to the section
+    const targetId = href.replace("#", "")
+    const element = document.getElementById(targetId)
+    
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth"
+      })
+    }
+  }
 
   const navLinks = [
     { name: "Features", href: "#features" },
@@ -34,17 +64,25 @@ export function Navbar() {
       }`}
     >
       <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer" 
+          onClick={(e) => scrollToSection(e as any, "#")}
+        >
           <Brain className="h-8 w-8 text-primary" />
           <span className="text-xl font-bold">
-            Req<span className="text-accent">AI</span>
+            Req<span className="text-accent">AI</span>ze
           </span>
         </div>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
-            <Link key={link.name} href={link.href} className="text-sm font-medium transition-colors hover:text-primary">
+            <Link 
+              key={link.name} 
+              href={link.href} 
+              className="text-sm font-medium transition-colors hover:text-primary"
+              onClick={(e) => scrollToSection(e, link.href)}
+            >
               {link.name}
             </Link>
           ))}
@@ -58,7 +96,7 @@ export function Navbar() {
           </Button>
 
           {/* Mobile Navigation */}
-          <Sheet>
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon">
                 <Menu className="h-6 w-6" />
@@ -72,6 +110,7 @@ export function Navbar() {
                     key={link.name}
                     href={link.href}
                     className="text-lg font-medium transition-colors hover:text-primary"
+                    onClick={(e) => scrollToSection(e, link.href, true)}
                   >
                     {link.name}
                   </Link>
