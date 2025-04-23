@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Brain, Sparkles } from "lucide-react"
+import { Chatbot } from "@/components/chatbot"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [showChatbot, setShowChatbot] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -57,6 +59,13 @@ export function Navbar() {
     { name: "Security", href: "#security" },
   ]
 
+  const handleDemoClick = () => {
+    setShowChatbot(true)
+    if (isSheetOpen) {
+      setIsSheetOpen(false)
+    }
+  }
+
   return (
     <header
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
@@ -90,7 +99,10 @@ export function Navbar() {
 
         <div className="flex items-center gap-4">
           <ModeToggle />
-          <Button className="hidden md:flex gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90">
+          <Button 
+            className="hidden md:flex gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90"
+            onClick={handleDemoClick}
+          >
             <Sparkles className="h-4 w-4" />
             Try Demo
           </Button>
@@ -115,7 +127,10 @@ export function Navbar() {
                     {link.name}
                   </Link>
                 ))}
-                <Button className="mt-4 gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90">
+                <Button 
+                  className="mt-4 gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90"
+                  onClick={handleDemoClick}
+                >
                   <Sparkles className="h-4 w-4" />
                   Try Demo
                 </Button>
@@ -124,6 +139,14 @@ export function Navbar() {
           </Sheet>
         </div>
       </div>
+
+      {/* Expanded Chatbot */}
+      {showChatbot && (
+        <Chatbot 
+          isExpanded={true} 
+          onClose={() => setShowChatbot(false)}
+        />
+      )}
     </header>
   )
 }

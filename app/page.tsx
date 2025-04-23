@@ -2,6 +2,7 @@ import { Navbar } from "@/components/navbar"
 import { HeroSection } from "@/components/hero-section"
 import { FeaturesSection } from "@/components/features-section"
 import { DemoSection } from "@/components/demo-section"
+import { ChatbotPreview } from "@/components/chatbot-preview"
 import { PrioritizationSection } from "@/components/prioritization-section"
 import { CollaborationSection } from "@/components/collaboration-section"
 import { DocumentGeneration } from "@/components/document-generation"
@@ -17,6 +18,7 @@ export default function Home() {
       <HeroSection />
       <FeaturesSection />
       <DemoSection />
+      <ChatbotPreview />
       <PrioritizationSection />
       <CollaborationSection />
       <DocumentGeneration />

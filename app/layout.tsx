@@ -1,4 +1,3 @@
-import type React from "react"
 import type { Metadata } from "next"
 import { Mona_Sans as FontSans } from "next/font/google"
 import "./globals.css"
@@ -13,7 +12,7 @@ const fontSans = FontSans({
 export const metadata: Metadata = {
   title: "ReqAI - AI-Powered Requirement Writing System",
   description: "Revolutionizing Requirement Engineering with AI",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({

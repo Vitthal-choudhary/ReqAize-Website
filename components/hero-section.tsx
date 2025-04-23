@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles, FileText, Brain } from "lucide-react"
+import { Chatbot } from "@/components/chatbot"
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false)
+  const [showChatbot, setShowChatbot] = useState(false)
 
   useEffect(() => {
     setIsVisible(true)
@@ -40,7 +42,11 @@ export function HeroSection() {
               </p>
             </div>
             <div className="flex flex-col gap-2 min-[400px]:flex-row">
-              <Button className="gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90 text-white" size="lg">
+              <Button 
+                className="gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90" 
+                size="lg"
+                onClick={() => setShowChatbot(true)}
+              >
                 <Sparkles className="h-4 w-4" />
                 Try Demo
                 <ArrowRight className="h-4 w-4 ml-2" />
@@ -78,9 +84,9 @@ export function HeroSection() {
               isVisible ? "opacity-100" : "opacity-0 translate-y-10"
             }`}
           >
-            <div className="relative w-full max-w-[500px] aspect-square">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 rounded-3xl blur-xl animate-pulse-slow"></div>
-              <div className="relative bg-card border rounded-3xl shadow-xl overflow-hidden p-6 h-full animate-float">
+            <div className="relative w-full max-w-[500px] aspect-square cursor-pointer" onClick={() => setShowChatbot(true)}>
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/20 to-gold/20 rounded-3xl blur-xl animate-pulse-slow"></div>
+              <div className="relative bg-card border rounded-3xl shadow-xl overflow-hidden p-6 h-full animate-float transition-transform duration-300 hover:scale-[1.02]">
                 <div className="absolute top-2 right-2 flex space-x-1">
                   <div className="h-2 w-2 rounded-full bg-red-500"></div>
                   <div className="h-2 w-2 rounded-full bg-yellow-500"></div>
@@ -117,11 +123,26 @@ export function HeroSection() {
                     </Button>
                   </div>
                 </div>
+                
+                {/* Overlay hint */}
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                  <p className="text-white text-xl font-bold px-6 py-3 bg-primary/80 rounded-full shadow-xl">
+                    Click to Try Demo
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Expanded Chatbot */}
+      {showChatbot && (
+        <Chatbot 
+          isExpanded={true} 
+          onClose={() => setShowChatbot(false)}
+        />
+      )}
     </section>
   )
 }
