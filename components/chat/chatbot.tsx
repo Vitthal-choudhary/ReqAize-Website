@@ -8,12 +8,13 @@ import { AnimatePresence, motion } from "framer-motion"
 import ReactMarkdown from 'react-markdown'
 
 // Store chat history outside the component to persist across sessions
-let chatHistory: Message[] = [
-  {
-    role: "assistant",
-    content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
-  }
-];
+let chatHistory: Message[] = [];
+
+// Default system prompt - controls how Mistral behaves
+const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant. You provide clear, concise, and accurate responses.
+                               When analyzing documents or code, you break down complex information into understandable parts. 
+                               For technical questions, you include relevant examples. 
+                               If you're uncertain about something, acknowledge the uncertainty rather than making up information.`;
 
 type Message = {
   role: "user" | "assistant" | "system"
@@ -24,31 +25,14 @@ type Message = {
 const MISTRAL_API_KEY = "0zjmsSJLjr0dvpgoN7l0ivkBCDQ5DgtL";
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 
-// Simple fallback for when Mistral API fails
-const getLocalAIResponse = (messageHistory: Message[], context: string = "") => {
-  const lastUserMessage = messageHistory.filter(m => m.role === "user").pop()?.content || "";
-  
-  // Check if this is for file processing
-  if (context.includes("Document Analysis") || lastUserMessage.includes("uploaded") || lastUserMessage.includes("file")) {
-    return `I've analyzed the document you uploaded. Here are some observations:
-
-1. This appears to be a formal document or letter with contact information.
-2. It contains dates, names, and other structured information.
-3. I can identify potential requirements or key information in this content.
-
-Would you like me to help organize this information into specific requirements or extract particular details?`;
-  }
-  
-  // Generic response for requirements engineering
-  return "Based on our conversation, I can help you with requirements engineering. Would you like me to help you extract, organize, or prioritize requirements from your documents or discussions?";
-};
-
 export function Chatbot({ 
   isExpanded = false,
   onClose,
+  systemPrompt = DEFAULT_SYSTEM_PROMPT, // Allow custom system prompt to be passed as prop
 }: { 
   isExpanded?: boolean
   onClose?: () => void 
+  systemPrompt?: string
 }) {
   const [expanded, setExpanded] = useState(isExpanded)
   const [messages, setMessages] = useState<Message[]>(chatHistory)
@@ -58,22 +42,6 @@ export function Chatbot({
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  
-  // Reset chat when opened
-  useEffect(() => {
-    if (isExpanded) {
-      // If chatHistory is empty (first time), add initial message
-      if (chatHistory.length === 0) {
-        chatHistory = [
-          {
-            role: "assistant",
-            content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
-          }
-        ];
-      }
-      setMessages(chatHistory);
-    }
-  }, [isExpanded]);
   
   // Set expanded state from props
   useEffect(() => {
@@ -121,38 +89,23 @@ export function Chatbot({
   // Call Mistral AI API
   const callMistralAPI = async (messageHistory: Message[]) => {
     try {
-      // Normalize message history to ensure valid sequence (no system after user/assistant)
-      const normalizedMessages: Message[] = [];
+      // Always include the system prompt at the beginning if not already present
+      let messagesWithSystemPrompt = [...messageHistory];
       
-      // Process messages to ensure they follow Mistral's expected format
-      for (const msg of messageHistory) {
-        // Convert 'system' messages to 'user' messages if they're not at the beginning
-        if (msg.role === 'system' && normalizedMessages.length > 0) {
-          normalizedMessages.push({
-            role: 'user',
-            content: `[SYSTEM] ${msg.content}`
-          });
-        } else {
-          normalizedMessages.push(msg);
-        }
+      // Check if the first message is a system message
+      if (messagesWithSystemPrompt.length === 0 || messagesWithSystemPrompt[0].role !== "system") {
+        // Insert the system prompt at the beginning
+        messagesWithSystemPrompt = [
+          { role: "system", content: systemPrompt },
+          ...messagesWithSystemPrompt
+        ];
       }
       
-      // Prevent overly large context by limiting history
-      const maxMessages = 8; // Limit context size to prevent overloading API
-      const limitedHistory = normalizedMessages.length > maxMessages ? 
-        [...normalizedMessages.slice(0, 2), ...normalizedMessages.slice(-maxMessages + 2)] : 
-        normalizedMessages;
-      
-      // Further limit content size by truncating long messages
-      const maxContentLength = 1500;
-      const formattedMessages = limitedHistory.map(msg => ({
-        role: msg.role === 'system' ? 'user' : msg.role, // Convert any remaining system to user
-        content: msg.content.length > maxContentLength ? 
-          msg.content.substring(0, maxContentLength) + "..." : 
-          msg.content
+      // Format messages for the API
+      const formattedMessages = messagesWithSystemPrompt.map(msg => ({
+        role: msg.role,
+        content: msg.content
       }));
-      
-      console.log("Calling Mistral API with messages:", JSON.stringify(formattedMessages.slice(0, 2)).substring(0, 100) + "... and " + formattedMessages.length + " more messages");
       
       // Call Mistral API with fetch
       const response = await fetch(MISTRAL_API_URL, {
@@ -166,35 +119,26 @@ export function Chatbot({
           messages: formattedMessages,
           temperature: 0.7,
           top_p: 1,
-          max_tokens: 500 // Reduced to avoid hitting limits
+          max_tokens: 500
         })
       });
       
       if (!response.ok) {
         console.error(`API error: ${response.status} - ${await response.text()}`);
-        // Use local fallback instead of throwing error
-        return getLocalAIResponse(messageHistory, formattedMessages[formattedMessages.length - 1]?.content || "");
+        throw new Error("API request failed");
       }
       
       const data = await response.json();
       return data.choices[0].message.content;
     } catch (error) {
       console.error("Error calling Mistral API:", error);
-      // Use local fallback
-      return getLocalAIResponse(messageHistory);
+      throw error;
     }
   };
 
   // Process files and call Mistral API with the extracted content
   const processFiles = async (uploadedFiles: File[]) => {
     setIsTyping(true);
-    
-    // Add processing message
-    const processingMessage: Message = {
-      role: "assistant",
-      content: "Processing your files... This may take a moment."
-    };
-    setMessages(prev => [...prev, processingMessage]);
     
     try {
       // Create FormData object with files
@@ -215,74 +159,44 @@ export function Chatbot({
 
       const data = await response.json();
       
-      // Remove the processing message
-      setMessages(prev => prev.filter(msg => msg !== processingMessage));
-      
-      // Format extracted text for display
-      let extractedContent = "## Document Analysis Results\n\n";
-      
-      for (const [fileName, fileData] of Object.entries(data.results)) {
-        if (typeof fileData === 'string') {
-          extractedContent += `### 📄 ${fileName}\n${fileData}\n\n`;
-        } else {
-          const typedFileData = fileData as { file_type: string, extracted_text: string };
-          extractedContent += `### 📄 ${fileName} (${typedFileData.file_type})\n`;
-          
-          // Add the extracted text with formatting
-          const extractedText = typedFileData.extracted_text;
-
-          // Skip "Binary file" messages and format the content better
-          if (extractedText.startsWith("Binary file")) {
-            extractedContent += "_This file was processed, but full text extraction requires specialized tools. The analysis will be based on file metadata and any text that could be extracted._\n\n";
-          } else if (extractedText.length > 800) {
-            // For longer texts, show a preview
-            extractedContent += "```\n" + extractedText.substring(0, 800).trim() + "...\n```\n\n";
-            extractedContent += "_Note: This is a preview. The full content has been processed for analysis._\n\n";
-          } else {
-            // For shorter texts, show everything with code formatting for clarity
-            extractedContent += "```\n" + extractedText.trim() + "\n```\n\n";
-          }
-        }
-      }
-      
-      // Add system message with extracted text
-      const extractionMessage: Message = {
-        role: "assistant",
-        content: extractedContent
-      };
-      
-      setMessages(prev => [...prev, extractionMessage]);
-      
-      // Prepare context for AI with extracted text - FIX: Use proper message format
-      // Instead of adding a system message after assistant message (which causes the Mistral API error),
-      // we'll create a user message with a special prefix that indicates this is automated context
+      // Create a context message with the extracted text
       const contextMessage: Message = {
-        role: "user",
-        content: `[CONTEXT] I've uploaded documents with the following content: ${JSON.stringify(data.results)}`
+        role: "system",
+        content: `Extracted content from files: ${JSON.stringify(data.results)}`
       };
       
-      // Add AI response to help with requirements
-      setIsTyping(true);
-      // Add the context message to our state but don't display it visually to the user
-      const updatedMessages = [...chatHistory, contextMessage];
-      const aiResponse = await callMistralAPI(updatedMessages);
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: "## Requirements Analysis\n\n" + aiResponse
+      // Add the context message to our state (not visible to user)
+      const updatedMessages = [...messages, contextMessage];
+      
+      // Use the existing input as the prompt or use a default prompt
+      const promptText = input.trim() || "Analyze the content from these files";
+      const userMessage: Message = {
+        role: "user",
+        content: promptText
+      };
+      
+      // Add user message to the UI and set messages
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Call Mistral with the prompt and include context
+      const aiResponse = await callMistralAPI([...updatedMessages, userMessage]);
+      
+      // Add AI response
+      const assistantMessage = { 
+        role: "assistant" as const, 
+        content: aiResponse 
       };
       
       setMessages(prev => [...prev, assistantMessage]);
+      setInput("");
       
     } catch (error) {
       console.error("Error processing files:", error);
       
-      // Remove the processing message
-      setMessages(prev => prev.filter(msg => msg !== processingMessage));
-      
       // Add error message
       const errorMessage: Message = {
         role: "assistant",
-        content: "❌ **Error Processing Files**\n\nI encountered an error while processing your files. Please ensure they are valid document files (PDF, Word, PowerPoint) and try again."
+        content: "Error processing files. Please try again."
       };
       
       setMessages(prev => [...prev, errorMessage]);
@@ -305,8 +219,17 @@ export function Chatbot({
       // Start typing indicator
       setIsTyping(true);
       
+      // If the input starts with /system/, treat it as a system prompt
+      if (input.startsWith("/system/")) {
+        const systemContent = input.substring(8).trim();
+        const systemMessage = { role: "system" as const, content: systemContent };
+        setMessages(prev => [...prev, systemMessage]);
+        setIsTyping(false);
+        return;
+      }
+      
       // Prepare messages for API call
-      const updatedMessages = [...chatHistory, userMessage];
+      const updatedMessages = [...messages, userMessage];
       
       // Call Mistral API
       try {
@@ -317,12 +240,12 @@ export function Chatbot({
         setMessages(prev => [...prev, assistantMessage]);
       } catch (error) {
         console.error("Error getting response:", error);
-        // Add fallback response
-        const assistantMessage = { 
+        // Add error message
+        const errorMessage = { 
           role: "assistant" as const, 
-          content: "I apologize, but I'm having trouble processing your request at the moment. Let me know if you'd like to try again or have a different question about requirements engineering." 
+          content: "Error communicating with the API. Please try again." 
         };
-        setMessages(prev => [...prev, assistantMessage]);
+        setMessages(prev => [...prev, errorMessage]);
       } finally {
         setIsTyping(false);
       }
@@ -332,8 +255,8 @@ export function Chatbot({
     if (files.length > 0) {
       const fileNames = files.map(f => f.name).join(", ");
       const fileUploadMessage = { 
-        role: "user" as const, 
-        content: `I've uploaded the following files: ${fileNames}`
+        role: "system" as const, 
+        content: `Processing files: ${fileNames}`
       };
       
       setMessages(prev => [...prev, fileUploadMessage]);
@@ -363,12 +286,8 @@ export function Chatbot({
 
   // Function to clear chat history
   const clearChat = () => {
-    const initialMessage = {
-      role: "assistant" as const,
-      content: "Hello! I'm the ReqAI assistant. How can I help you extract and manage requirements today?"
-    };
-    chatHistory = [initialMessage];
-    setMessages([initialMessage]);
+    chatHistory = [];
+    setMessages([]);
   }
 
   return (
@@ -392,7 +311,7 @@ export function Chatbot({
               <div className="flex items-center gap-2">
                 <Brain className="h-6 w-6 text-primary" />
                 <h3 className="font-semibold">
-                  ReqAI Assistant 
+                  Custom Mistral Chat
                   <span className="text-xs text-muted-foreground ml-1">
                     (Powered by Mistral AI)
                   </span>
@@ -430,9 +349,16 @@ export function Chatbot({
                     "p-3 rounded-lg max-w-[80%]",
                     message.role === "assistant" 
                       ? "bg-muted" 
+                      : message.role === "system"
+                      ? "bg-yellow-100 border border-yellow-300"
                       : "bg-primary/10 ml-auto"
                   )}
                 >
+                  {message.role === "system" && (
+                    <div className="flex items-center mb-1">
+                      <span className="text-xs font-semibold text-yellow-600">SYSTEM</span>
+                    </div>
+                  )}
                   {message.role === "assistant" ? (
                     <ReactMarkdown 
                       components={{
@@ -477,7 +403,7 @@ export function Chatbot({
                   <div className="text-center">
                     <FileUp className="h-12 w-12 text-primary mx-auto mb-4" />
                     <h3 className="text-lg font-medium">Drop your files here</h3>
-                    <p className="text-muted-foreground">Upload documents to extract requirements</p>
+                    <p className="text-muted-foreground">Upload files for processing</p>
                   </div>
                 </div>
               )}
@@ -531,7 +457,7 @@ export function Chatbot({
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyPress}
-                    placeholder="Ask a question..."
+                    placeholder="Type a message..."
                     className="w-full h-10 bg-muted rounded-md flex items-center px-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                   <Button 
