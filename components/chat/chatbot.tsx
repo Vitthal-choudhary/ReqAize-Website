@@ -11,10 +11,35 @@ import ReactMarkdown from 'react-markdown'
 let chatHistory: Message[] = [];
 
 // Default system prompt - controls how Mistral behaves
-const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant. You provide clear, concise, and accurate responses.
-                               When analyzing documents or code, you break down complex information into understandable parts. 
-                               For technical questions, you include relevant examples. 
-                               If you're uncertain about something, acknowledge the uncertainty rather than making up information.`;
+const DEFAULT_SYSTEM_PROMPT = `You are a requirements analyst focused on crafting SMART (Specific, Measurable, Achievable, Relevant, Time-bound) requirements. Given the input below, generate one precise, open-ended follow-up question to clarify or strengthen the requirement.
+
+Requirement ID: [reqId] 
+Type: [type]  
+Requirement Text: [requirement]
+Priority: [priority]
+
+Your question should aim to identify or explore one of the following:  
+- Gaps in detail (e.g., missing quantities, thresholds, or operational parameters)  
+- Ambiguities in wording (e.g., subjective terms like "quick," "intuitive," or "reliable")  
+- Clear and testable acceptance criteria (e.g., how completion or success will be verified)  
+- Constraints, edge cases, or environmental factors that could impact implementation
+
+Only return the single follow-up question. Do not include any introductory text or explanation.
+
+Examples for inspiration:  
+- What does "minimal downtime" specifically mean in terms of hours or minutes?  
+- How will we determine that the interface is "intuitive" for users?  
+- Are there any scenarios where this functionality should be disabled?  
+- What is the maximum acceptable delay between input and system response?`;
+
+// Helper function to create a requirements prompt with actual data
+const createRequirementsPrompt = (reqId: string, type: string, requirement: string, priority: string) => {
+  return DEFAULT_SYSTEM_PROMPT
+    .replace('[reqId]', reqId)
+    .replace('[type]', type)
+    .replace('[requirement]', requirement)
+    .replace('[priority]', priority);
+};
 
 type Message = {
   role: "user" | "assistant" | "system"
@@ -29,10 +54,14 @@ export function Chatbot({
   isExpanded = false,
   onClose,
   systemPrompt = DEFAULT_SYSTEM_PROMPT, // Allow custom system prompt to be passed as prop
+  isRequirementsAnalyst = false, // Flag to use requirements analyst mode
+  requirementData = null, // Data for requirement analysis
 }: { 
   isExpanded?: boolean
   onClose?: () => void 
   systemPrompt?: string
+  isRequirementsAnalyst?: boolean // Flag for requirements mode
+  requirementData?: { reqId: string, type: string, requirement: string, priority: string } | null
 }) {
   const [expanded, setExpanded] = useState(isExpanded)
   const [messages, setMessages] = useState<Message[]>(chatHistory)
@@ -94,9 +123,22 @@ export function Chatbot({
       
       // Check if the first message is a system message
       if (messagesWithSystemPrompt.length === 0 || messagesWithSystemPrompt[0].role !== "system") {
+        // Get the appropriate system prompt based on mode
+        let promptContent = systemPrompt;
+        
+        if (isRequirementsAnalyst && requirementData) {
+          // Use the formatted requirements prompt with actual data
+          promptContent = createRequirementsPrompt(
+            requirementData.reqId,
+            requirementData.type,
+            requirementData.requirement,
+            requirementData.priority
+          );
+        }
+        
         // Insert the system prompt at the beginning
         messagesWithSystemPrompt = [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: promptContent },
           ...messagesWithSystemPrompt
         ];
       }
@@ -311,7 +353,7 @@ export function Chatbot({
               <div className="flex items-center gap-2">
                 <Brain className="h-6 w-6 text-primary" />
                 <h3 className="font-semibold">
-                  Custom Mistral Chat
+                  {isRequirementsAnalyst ? "Requirements Analyst" : "Custom Mistral Chat"}
                   <span className="text-xs text-muted-foreground ml-1">
                     (Powered by Mistral AI)
                   </span>
