@@ -7,11 +7,15 @@ import { ModeToggle } from "./mode-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Brain, Sparkles } from "lucide-react"
 import { Chatbot } from "../chat/chatbot"
+import { LoginButton } from "../auth/LoginButton"
+import { useAuth } from "../auth/AuthContext"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [showChatbot, setShowChatbot] = useState(false)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const { user } = useAuth()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -60,6 +64,10 @@ export function Navbar() {
   ]
 
   const handleDemoClick = () => {
+    if (!user) {
+      setShowLoginModal(true)
+      return
+    }
     setShowChatbot(true)
     if (isSheetOpen) {
       setIsSheetOpen(false)
@@ -98,6 +106,7 @@ export function Navbar() {
         </nav>
 
         <div className="flex items-center gap-4">
+          <LoginButton />
           <ModeToggle />
           <Button 
             className="hidden md:flex gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90"
@@ -127,6 +136,9 @@ export function Navbar() {
                     {link.name}
                   </Link>
                 ))}
+                <div className="flex items-center gap-2 mt-4">
+                  <LoginButton />
+                </div>
                 <Button 
                   className="mt-4 gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90"
                   onClick={handleDemoClick}

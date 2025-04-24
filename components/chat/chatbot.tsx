@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { ArrowRight, Brain, X, Paperclip, Send, FileUp, FileText } from "lucide-react"
+import { ArrowRight, Brain, X, Paperclip, Send, FileUp, FileText, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "framer-motion"
 import ReactMarkdown from 'react-markdown'
+import { useAuth } from "@/components/auth/AuthContext"
+import { LoginModal } from "@/components/auth/LoginModal"
 
 // Store chat history outside the component to persist across sessions
 let chatHistory: Message[] = [];
@@ -69,8 +71,10 @@ export function Chatbot({
   const [isTyping, setIsTyping] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [showLoginModal, setShowLoginModal] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { user } = useAuth()
   
   // Set expanded state from props
   useEffect(() => {
@@ -180,6 +184,11 @@ export function Chatbot({
 
   // Process files and call Mistral API with the extracted content
   const processFiles = async (uploadedFiles: File[]) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
     setIsTyping(true);
     
     try {
@@ -248,274 +257,295 @@ export function Chatbot({
     }
   };
 
-  // Handle sending a message
   const handleSend = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
     if (!input.trim() && files.length === 0) return;
+      
+    // If files are present, process them
+    if (files.length > 0) {
+      await processFiles(files);
+      return;
+    }
     
-    // Add user message for text input
-    if (input.trim()) {
+    // Handle text-only input
+    setIsTyping(true);
+    
+    try {
+      // Add user message
       const userMessage = { role: "user" as const, content: input };
       setMessages(prev => [...prev, userMessage]);
       setInput("");
       
-      // Start typing indicator
-      setIsTyping(true);
-      
-      // If the input starts with /system/, treat it as a system prompt
-      if (input.startsWith("/system/")) {
-        const systemContent = input.substring(8).trim();
-        const systemMessage = { role: "system" as const, content: systemContent };
-        setMessages(prev => [...prev, systemMessage]);
-        setIsTyping(false);
-        return;
-      }
-      
-      // Prepare messages for API call
-      const updatedMessages = [...messages, userMessage];
-      
       // Call Mistral API
-      try {
-        const aiResponse = await callMistralAPI(updatedMessages);
-        
-        // Add AI response
-        const assistantMessage = { role: "assistant" as const, content: aiResponse };
-        setMessages(prev => [...prev, assistantMessage]);
-      } catch (error) {
-        console.error("Error getting response:", error);
-        // Add error message
-        const errorMessage = { 
-          role: "assistant" as const, 
-          content: "Error communicating with the API. Please try again." 
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      } finally {
-        setIsTyping(false);
-      }
-    }
-    
-    // Handle file uploads
-    if (files.length > 0) {
-      const fileNames = files.map(f => f.name).join(", ");
-      const fileUploadMessage = { 
-        role: "system" as const, 
-        content: `Processing files: ${fileNames}`
+      const aiResponse = await callMistralAPI([...messages, userMessage]);
+      
+      // Add AI response
+      const assistantMessage = { 
+        role: "assistant" as const, 
+        content: aiResponse 
       };
       
-      setMessages(prev => [...prev, fileUploadMessage]);
+      setMessages(prev => [...prev, assistantMessage]);
       
-      // Process the files
-      await processFiles([...files]);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        role: "assistant",
+        content: "Sorry, an error occurred. Please try again."
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
     }
   };
 
-  // Handle key press (Enter to send)
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
-  // Function to remove a file
   const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index))
-  }
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
-  // Handle click on file button
   const handleFileButtonClick = () => {
-    fileInputRef.current?.click()
-  }
+    fileInputRef.current?.click();
+  };
 
-  // Function to clear chat history
   const clearChat = () => {
-    chatHistory = [];
     setMessages([]);
+    chatHistory = [];
+  };
+  
+  // If not expanded, show the floating chatbot button
+  if (!expanded) {
+    return (
+      <motion.button
+        className="fixed bottom-6 right-6 p-4 rounded-full bg-gradient-to-r from-primary via-accent to-gold text-white shadow-lg z-50"
+        onClick={() => {
+          if (!user) {
+            setShowLoginModal(true);
+            return;
+          }
+          setExpanded(true);
+        }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <Brain className="h-6 w-6" />
+      </motion.button>
+    );
   }
 
+  // If a user is not authenticated, show the login prompt
+  if (!user && expanded) {
+    return (
+      <>
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-card border shadow-lg rounded-lg w-full max-w-md p-6 text-center">
+            <Brain className="h-12 w-12 mx-auto mb-4 text-primary" />
+            <h2 className="text-2xl font-bold mb-4">Authentication Required</h2>
+            <p className="mb-6">Please log in to use the AI chatbot.</p>
+            <div className="flex justify-center gap-4">
+              <Button
+                onClick={() => setShowLoginModal(true)}
+                className="gap-2 bg-gradient-to-r from-primary via-accent to-gold hover:opacity-90"
+              >
+                <LogIn className="h-4 w-4" />
+                Login
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+        <LoginModal isOpen={showLoginModal} onClose={() => {
+          setShowLoginModal(false);
+          if (onClose) onClose();
+        }} />
+      </>
+    );
+  }
+
+  // Full chatbot UI
   return (
-    <AnimatePresence>
-      {expanded && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-        >
-          <motion.div
-            initial={{ y: 20 }}
-            animate={{ y: 0 }}
-            transition={{ duration: 0.3, delay: 0.1 }}
-            className="flex flex-col bg-card border rounded-3xl shadow-2xl overflow-hidden max-w-3xl w-full h-[80vh] max-h-[700px]"
-          >
-            {/* Chat Header */}
-            <div className="flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <Brain className="h-6 w-6 text-primary" />
-                <h3 className="font-semibold">
-                  {isRequirementsAnalyst ? "Requirements Analyst" : "Custom Mistral Chat"}
-                  <span className="text-xs text-muted-foreground ml-1">
-                    (Powered by Mistral AI)
-                  </span>
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-xs"
-                  onClick={clearChat}
-                >
-                  Clear Chat
-                </Button>
-                <Button variant="ghost" size="icon" onClick={onClose}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Chat Messages */}
-            <div 
-              className="flex-1 overflow-y-auto p-4 space-y-4"
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+    <>
+      <div 
+        className={cn(
+          "fixed inset-0 bg-background/80 backdrop-blur-md z-50 flex items-center justify-center p-4",
+          expanded ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+      >
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="bg-card border shadow-lg rounded-lg w-full max-w-4xl h-[80vh] flex flex-col"
             >
-              {messages.map((message, index) => (
-                <motion.div 
-                  key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.05 }}
-                  className={cn(
-                    "p-3 rounded-lg max-w-[80%]",
-                    message.role === "assistant" 
-                      ? "bg-muted" 
-                      : message.role === "system"
-                      ? "bg-yellow-100 border border-yellow-300"
-                      : "bg-primary/10 ml-auto"
-                  )}
-                >
-                  {message.role === "system" && (
-                    <div className="flex items-center mb-1">
-                      <span className="text-xs font-semibold text-yellow-600">SYSTEM</span>
-                    </div>
-                  )}
-                  {message.role === "assistant" ? (
-                    <ReactMarkdown 
-                      components={{
-                        p: ({ node, ...props }) => <p className="text-sm my-1" {...props} />,
-                        h1: ({ node, ...props }) => <h1 className="text-xl font-semibold my-2" {...props} />,
-                        h2: ({ node, ...props }) => <h2 className="text-lg font-semibold my-2" {...props} />,
-                        h3: ({ node, ...props }) => <h3 className="text-md font-semibold my-1" {...props} />,
-                        ul: ({ node, ...props }) => <ul className="list-disc pl-6 my-2" {...props} />,
-                        ol: ({ node, ...props }) => <ol className="list-decimal pl-6 my-2" {...props} />,
-                        li: ({ node, ...props }) => <li className="my-1" {...props} />,
-                        a: ({ node, ...props }) => <a className="text-primary underline" {...props} />,
-                        code: ({ node, ...props }) => <code className="bg-muted px-1 py-0.5 rounded" {...props} />,
-                        pre: ({ node, ...props }) => <pre className="bg-muted p-2 rounded my-2 overflow-auto" {...props} />,
-                      }}
-                    >
-                      {message.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="text-sm whitespace-pre-line">{message.content}</p>
-                  )}
-                </motion.div>
-              ))}
-              
-              {/* Typing indicator */}
-              {isTyping && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-muted p-3 rounded-lg max-w-[80%]"
-                >
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "200ms" }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "400ms" }}></div>
-                  </div>
-                </motion.div>
-              )}
-              
-              {/* Drag overlay */}
-              {isDragging && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/90 border-2 border-dashed border-primary/50 rounded-lg z-10">
-                  <div className="text-center">
-                    <FileUp className="h-12 w-12 text-primary mx-auto mb-4" />
-                    <h3 className="text-lg font-medium">Drop your files here</h3>
-                    <p className="text-muted-foreground">Upload files for processing</p>
-                  </div>
+              {/* Header */}
+              <div className="p-4 border-b flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-primary" />
+                  <h2 className="font-semibold">ReqAIze Assistant</h2>
                 </div>
-              )}
+                <button onClick={onClose} className="p-1 rounded-full hover:bg-muted">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
               
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* File attachments */}
-            {files.length > 0 && (
-              <div className="px-4 py-2 border-t border-border/50 bg-muted/50">
-                <div className="flex flex-wrap gap-2">
+              {/* Messages */}
+              <div 
+                className="flex-1 overflow-y-auto p-4 space-y-4"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4 text-muted-foreground">
+                    <Brain className="h-12 w-12 mb-4 opacity-50" />
+                    <h3 className="text-lg font-medium mb-2">How can I help you?</h3>
+                    <p className="max-w-md text-sm">
+                      I'm your AI assistant specialized in requirements analysis. Ask me questions or upload documents for analysis.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {messages.filter(m => m.role !== "system").map((message, index) => (
+                      <div
+                        key={index}
+                        className={cn(
+                          "flex gap-3 p-4 rounded-lg",
+                          message.role === "assistant" 
+                            ? "bg-muted" 
+                            : "bg-primary-foreground/50 border"
+                        )}
+                      >
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                          {message.role === "assistant" ? (
+                            <Brain className="h-5 w-5 text-primary" />
+                          ) : (
+                            <div className="bg-primary h-full w-full rounded-full flex items-center justify-center text-white">
+                              U
+                            </div>
+                          )}
+                        </div>
+                        <div className="prose prose-sm dark:prose-invert flex-1 break-words overflow-hidden">
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+                
+                {isDragging && (
+                  <div className="absolute inset-0 border-2 border-dashed border-primary/50 rounded-lg bg-background/50 flex items-center justify-center">
+                    <div className="text-center">
+                      <FileUp className="h-12 w-12 mx-auto mb-4 text-primary/70" />
+                      <p className="text-lg font-medium">Drop files here</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* File Chips */}
+              {files.length > 0 && (
+                <div className="p-3 border-t flex gap-2 flex-wrap">
                   {files.map((file, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-lg text-xs">
-                      <FileText className="h-3 w-3 text-primary" />
-                      <span className="truncate max-w-[150px]">{file.name}</span>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-4 w-4 ml-1 hover:bg-background/50 rounded-full" 
+                    <div 
+                      key={index}
+                      className="flex items-center gap-2 bg-muted px-3 py-1 rounded-full text-xs"
+                    >
+                      <FileText className="h-3 w-3" />
+                      <span className="truncate max-w-[120px]">{file.name}</span>
+                      <button 
                         onClick={() => removeFile(index)}
+                        className="p-1 hover:bg-background rounded-full"
                       >
                         <X className="h-3 w-3" />
-                      </Button>
+                      </button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* Input Area */}
-            <div className="p-4 border-t bg-background/80 backdrop-blur-sm">
-              <div className="flex space-x-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  multiple
-                />
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="shrink-0"
-                  onClick={handleFileButtonClick}
-                >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <div className="relative flex-1">
+              )}
+              
+              {/* Footer */}
+              <div className="p-4 border-t">
+                <div className="relative flex items-center">
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    multiple
+                  />
+                  <button 
+                    onClick={handleFileButtonClick}
+                    className="absolute left-3 p-1 hover:bg-muted rounded-full text-muted-foreground"
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </button>
                   <input
-                    type="text"
+                    className="w-full rounded-full border bg-background px-12 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                    placeholder="Type a message..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyPress}
-                    placeholder="Type a message..."
-                    className="w-full h-10 bg-muted rounded-md flex items-center px-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    disabled={isTyping}
                   />
-                  <Button 
-                    size="icon" 
-                    className="absolute right-1 top-1 h-8 w-8 bg-primary hover:bg-primary/90"
+                  <button 
                     onClick={handleSend}
                     disabled={isTyping || (!input.trim() && files.length === 0)}
+                    className={cn(
+                      "absolute right-3 p-1 rounded-full",
+                      (!input.trim() && files.length === 0)
+                        ? "text-muted-foreground" 
+                        : "bg-primary text-white"
+                    )}
+                    aria-label="Send message"
                   >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                    {isTyping ? (
+                      <div className="h-5 w-5 flex items-center justify-center">
+                        <div className="animate-spin h-3 w-3 border-2 border-t-transparent rounded-full" />
+                      </div>
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                
+                {/* Extra controls */}
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <button onClick={clearChat} className="hover:text-primary">
+                    Clear chat
+                  </button>
+                  <div>
+                    Powered by Mistral AI
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
+    </>
+  );
 } 
