@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles, FileText, Brain } from "lucide-react"
-import { Chatbot } from "@/components/chatbot"
+import { Chatbot } from "@/components/chat/chatbot"
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false)

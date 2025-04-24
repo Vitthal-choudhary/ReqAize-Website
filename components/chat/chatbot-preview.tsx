@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Sparkles, Brain } from "lucide-react"
-import { Chatbot } from "@/components/chatbot"
+import { Chatbot } from "./chatbot"
 import { cn } from "@/lib/utils"
 
 export function ChatbotPreview() {

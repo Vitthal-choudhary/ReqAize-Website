@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ModeToggle } from "@/components/mode-toggle"
+import { ModeToggle } from "./mode-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Brain, Sparkles } from "lucide-react"
-import { Chatbot } from "@/components/chatbot"
+import { Chatbot } from "../chat/chatbot"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
