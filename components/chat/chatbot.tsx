@@ -72,6 +72,7 @@ export function Chatbot({
   const [files, setFiles] = useState<File[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showExportNotification, setShowExportNotification] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
@@ -442,6 +443,40 @@ export function Chatbot({
     );
   }
 
+  // Function to export chat responses to Excel
+  const exportResponses = async () => {
+    try {
+      // Filter out system messages for export
+      const messagesToExport = messages.filter(m => m.role !== "system");
+      
+      if (messagesToExport.length === 0) {
+        alert("No messages to export");
+        return;
+      }
+      
+      // Call the API to export messages
+      const response = await fetch('/api/export-chat/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: messagesToExport }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to export messages');
+      }
+      
+      // Show notification
+      setShowExportNotification(true);
+      setTimeout(() => setShowExportNotification(false), 3000);
+      
+    } catch (error) {
+      console.error('Error exporting messages:', error);
+      alert('Failed to export messages: ' + (error as Error).message);
+    }
+  };
+
   // Full chatbot UI
   return (
     <>
@@ -466,10 +501,35 @@ export function Chatbot({
                   <Brain className="h-5 w-5 text-primary" />
                   <h2 className="font-semibold">ReqAIze Assistant</h2>
                 </div>
-                <button onClick={onClose} className="p-1 rounded-full hover:bg-muted">
-                  <X className="h-5 w-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={exportResponses} 
+                    className="flex items-center gap-1"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Export
+                  </Button>
+                  <button onClick={onClose} className="p-1 rounded-full hover:bg-muted">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
+              
+              {/* Export Success Notification */}
+              <AnimatePresence>
+                {showExportNotification && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-4 py-2 rounded-md shadow-md"
+                  >
+                    Requirements extracted successfully
+                  </motion.div>
+                )}
+              </AnimatePresence>
               
               {/* Messages */}
               <div 

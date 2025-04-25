@@ -4,7 +4,6 @@ import { exec } from 'child_process';
 import { join } from 'path';
 import { promisify } from 'util';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
 
 const execPromise = promisify(exec);
 
@@ -43,10 +42,6 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      // Create a temporary file for extraction results
-      const tempId = randomUUID();
-      const tempResultPath = join(process.cwd(), `temp_extraction_${tempId}.json`);
-      
       // Use the extract.bat script to run the Python extraction
       const batchScript = join(process.cwd(), 'backend/extract.bat');
       const filePathArgs = filePaths.map(path => `"${path}"`).join(' ');
@@ -75,8 +70,7 @@ export async function POST(req: NextRequest) {
         console.log('Reading extraction results from:', originalResultPath);
         results = JSON.parse(fs.readFileSync(originalResultPath, 'utf8'));
         
-        // Copy to our temp file and delete the original
-        fs.writeFileSync(tempResultPath, JSON.stringify(results, null, 2));
+        // Delete the original results file after reading it
         fs.unlinkSync(originalResultPath);
       } else {
         // Fallback if Python script didn't create the results file
