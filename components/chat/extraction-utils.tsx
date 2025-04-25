@@ -1,11 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 export function ExtractionResults() {
-  const [resultsData, setResultsData] = useState<any>(null);
+  const [responsesData, setResponsesData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,15 +14,15 @@ export function ExtractionResults() {
     setError("");
     
     try {
-      const response = await fetch('/api/get-extraction-results');
+      const response = await fetch('/api/get-chat-responses');
       if (!response.ok) {
-        throw new Error(`Failed to fetch results: ${response.status}`);
+        throw new Error(`Failed to fetch responses: ${response.status}`);
       }
       
       const data = await response.json();
-      setResultsData(data.results);
+      setResponsesData(data.responses);
     } catch (err) {
-      setError(`Error fetching extraction results: ${(err as Error).message}`);
+      setError(`Error fetching chat responses: ${(err as Error).message}`);
       console.error(err);
     } finally {
       setLoading(false);
@@ -30,15 +30,15 @@ export function ExtractionResults() {
   };
 
   const downloadResults = () => {
-    if (!resultsData) return;
+    if (!responsesData) return;
     
-    const dataStr = JSON.stringify(resultsData, null, 2);
+    const dataStr = JSON.stringify(responsesData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'extraction_results.json';
+    a.download = 'chat_responses.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -49,8 +49,8 @@ export function ExtractionResults() {
     <div className="p-4 border rounded-lg bg-card shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-primary" />
-          <h3 className="font-medium">Extraction Results</h3>
+          <MessageSquare className="h-5 w-5 text-primary" />
+          <h3 className="font-medium">Chat Responses</h3>
         </div>
         
         <div className="flex gap-2">
@@ -60,10 +60,10 @@ export function ExtractionResults() {
             onClick={fetchResults}
             disabled={loading}
           >
-            {loading ? 'Loading...' : 'View Results'}
+            {loading ? 'Loading...' : 'View Responses'}
           </Button>
           
-          {resultsData && (
+          {responsesData && (
             <Button 
               variant="outline" 
               size="sm"
@@ -82,23 +82,23 @@ export function ExtractionResults() {
         </div>
       )}
       
-      {resultsData && (
+      {responsesData && (
         <div className="border p-3 rounded-md bg-muted/50 max-h-[400px] overflow-y-auto">
           <pre className="text-xs whitespace-pre-wrap break-all">
-            {JSON.stringify(resultsData, null, 2)}
+            {JSON.stringify(responsesData, null, 2)}
           </pre>
         </div>
       )}
       
-      {!resultsData && !loading && !error && (
+      {!responsesData && !loading && !error && (
         <div className="text-sm text-muted-foreground">
-          Click "View Results" to see the most recent text extraction results.
+          Click "View Responses" to see the recent Mistral AI chat responses.
         </div>
       )}
       
       <p className="text-xs text-muted-foreground mt-4">
-        The extraction_results.json file is stored in the project root directory:<br />
-        <code className="bg-muted px-1 py-0.5 rounded text-xs">extraction_results.json</code>
+        All Mistral AI chat responses are stored in a file until the chat is cleared:<br />
+        <code className="bg-muted px-1 py-0.5 rounded text-xs">chat_responses.json</code>
       </p>
     </div>
   );

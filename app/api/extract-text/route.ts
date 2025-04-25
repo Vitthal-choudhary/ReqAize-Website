@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { join } from 'path';
 import { promisify } from 'util';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 
 const execPromise = promisify(exec);
 
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      // Create a temporary file for extraction results
+      const tempId = randomUUID();
+      const tempResultPath = join(process.cwd(), `temp_extraction_${tempId}.json`);
+      
       // Use the extract.bat script to run the Python extraction
       const batchScript = join(process.cwd(), 'backend/extract.bat');
       const filePathArgs = filePaths.map(path => `"${path}"`).join(' ');
@@ -62,13 +67,17 @@ export async function POST(req: NextRequest) {
         );
       }
       
-      // Read the extraction results JSON file
-      const resultPath = join(process.cwd(), 'extraction_results.json');
+      // Read the extraction results JSON file (using the original location that the Python script uses)
+      const originalResultPath = join(process.cwd(), 'extraction_results.json');
       
-      if (fs.existsSync(resultPath)) {
-        console.log('Reading extraction results from:', resultPath);
-        const results = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-        return NextResponse.json({ results });
+      let results;
+      if (fs.existsSync(originalResultPath)) {
+        console.log('Reading extraction results from:', originalResultPath);
+        results = JSON.parse(fs.readFileSync(originalResultPath, 'utf8'));
+        
+        // Copy to our temp file and delete the original
+        fs.writeFileSync(tempResultPath, JSON.stringify(results, null, 2));
+        fs.unlinkSync(originalResultPath);
       } else {
         // Fallback if Python script didn't create the results file
         console.error('Extraction results file not found');
@@ -77,6 +86,8 @@ export async function POST(req: NextRequest) {
           { status: 500 }
         );
       }
+      
+      return NextResponse.json({ results });
     } catch (error) {
       console.error('Error during extraction:', error);
       
@@ -109,10 +120,6 @@ export async function POST(req: NextRequest) {
           };
         }
       }
-      
-      // Save fallback results
-      const resultPath = join(process.cwd(), 'extraction_results.json');
-      fs.writeFileSync(resultPath, JSON.stringify(fallbackResults, null, 2));
       
       return NextResponse.json({ 
         results: fallbackResults,

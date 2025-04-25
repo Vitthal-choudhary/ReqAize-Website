@@ -106,9 +106,9 @@ if __name__ == "__main__":
         output_dir = os.path.dirname(os.path.join(os.getcwd(), 'extraction_results.json'))
         ensure_directory_exists(output_dir)
         
-        # Save full results to JSON file
+        # Save full results to JSON file (this is temporary and will be handled by the API)
         output_path = os.path.join(os.getcwd(), 'extraction_results.json')
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
             
-        print(f"\nFull results saved to '{output_path}'")
+        print(f"\nFull results saved to '{output_path}' (temporary file)")

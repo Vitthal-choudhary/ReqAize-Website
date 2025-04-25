@@ -239,6 +239,20 @@ export function Chatbot({
       };
       
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // Save the assistant message to the responses file
+      try {
+        await fetch('/api/save-chat-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: assistantMessage }),
+        });
+      } catch (saveError) {
+        console.error('Error saving chat response:', saveError);
+      }
+      
       setInput("");
       
     } catch (error) {
@@ -251,6 +265,19 @@ export function Chatbot({
       };
       
       setMessages(prev => [...prev, errorMessage]);
+      
+      // Save error message to responses file
+      try {
+        await fetch('/api/save-chat-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: errorMessage }),
+        });
+      } catch (saveError) {
+        console.error('Error saving chat error response:', saveError);
+      }
     } finally {
       setIsTyping(false);
       setFiles([]);
@@ -291,6 +318,19 @@ export function Chatbot({
       
       setMessages(prev => [...prev, assistantMessage]);
       
+      // Save the assistant message to the responses file
+      try {
+        await fetch('/api/save-chat-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: assistantMessage }),
+        });
+      } catch (saveError) {
+        console.error('Error saving chat response:', saveError);
+      }
+      
     } catch (error) {
       console.error("Error sending message:", error);
       
@@ -301,6 +341,19 @@ export function Chatbot({
       };
       
       setMessages(prev => [...prev, errorMessage]);
+      
+      // Save error message to responses file
+      try {
+        await fetch('/api/save-chat-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: errorMessage }),
+        });
+      } catch (saveError) {
+        console.error('Error saving chat error response:', saveError);
+      }
     } finally {
       setIsTyping(false);
     }
@@ -321,9 +374,18 @@ export function Chatbot({
     fileInputRef.current?.click();
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
     setMessages([]);
     chatHistory = [];
+    
+    // Clear the chat responses file
+    try {
+      await fetch('/api/clear-chat-responses', {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error clearing chat responses:', error);
+    }
   };
   
   // If not expanded, show the floating chatbot button

@@ -37,4 +37,4 @@ next-env.d.ts
 
 # File uploads and extraction results
 /uploads/
-extraction_results.json
+chat_responses.json
