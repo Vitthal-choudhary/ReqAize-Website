@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { ThemeProvider } from "@/components/layout/theme-provider"
 import { AuthProvider } from "@/components/auth/AuthContext"
 import { JiraProvider } from "@/lib/jira/context"
+import Script from "next/script"
 
 const fontSans = FontSans({
   subsets: ["latin"],
@@ -24,6 +25,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <AuthProvider>
@@ -32,6 +36,21 @@ export default function RootLayout({
             </JiraProvider>
           </AuthProvider>
         </ThemeProvider>
+        
+        {/* Force immediate client-side hydration */}
+        <Script id="hydration-fix" strategy="afterInteractive">
+          {`
+            if (typeof window !== 'undefined') {
+              window.onload = function() {
+                // Force a re-render if content isn't fully loaded
+                if (document.querySelectorAll('main > *').length <= 1) {
+                  console.log('Forcing re-render to fix hydration...');
+                  window.location.reload();
+                }
+              }
+            }
+          `}
+        </Script>
       </body>
     </html>
   )

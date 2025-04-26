@@ -36,7 +36,7 @@ export function FeaturesSection() {
       icon: Brain,
       title: "AI-Powered Extraction",
       description:
-        "Automatically extract and organize requirements from various document formats including Word, PDF, and emails.",
+        "Automatically extract and organize requirements from various document formats including Word, PDF, and MOMs.",
       color: "text-primary",
       bgColor: "bg-primary/10",
     },
@@ -49,18 +49,18 @@ export function FeaturesSection() {
       bgColor: "bg-accent/10",
     },
     {
-      icon: Users,
-      title: "Real-Time Collaboration",
-      description: "Work together with your team in real-time with version control and collaborative editing features.",
-      color: "text-gold",
-      bgColor: "bg-gold/10",
-    },
-    {
       icon: FileOutput,
       title: "Document Generation",
       description: "Generate standardized Word documents and Excel sheets with user stories and requirements.",
       color: "text-primary",
       bgColor: "bg-primary/10",
+    },
+    {
+      icon: Shield,
+      title: "Enterprise Security",
+      description: "Bank-grade security with data encryption and compliance with industry standards.",
+      color: "text-gold",
+      bgColor: "bg-gold/10",
     },
     {
       icon: FileText,
@@ -70,9 +70,9 @@ export function FeaturesSection() {
       bgColor: "bg-accent/10",
     },
     {
-      icon: Shield,
-      title: "Enterprise Security",
-      description: "Bank-grade security with data encryption and compliance with industry standards.",
+      icon: Users,
+      title: "Real-Time Collaboration",
+      description: "Work together with your team in real-time with version control and collaborative editing features.",
       color: "text-gold",
       bgColor: "bg-gold/10",
     },
