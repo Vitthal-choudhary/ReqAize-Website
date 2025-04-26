@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileUp, FileText, CheckCircle, X, Download, Loader2 } from "lucide-react"
+import { FileUp, FileText, CheckCircle, X, Download, Loader2, FileJson } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export function TextExtractionSection() {
   const [activeTab, setActiveTab] = useState("upload")
@@ -16,7 +17,10 @@ export function TextExtractionSection() {
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [extractedText, setExtractedText] = useState<any>(null)
+  const [processedData, setProcessedData] = useState<any>(null)
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null)
+  const [downloadPath, setDownloadPath] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   
   const sectionRef = useRef<HTMLElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -59,7 +63,9 @@ export function TextExtractionSection() {
       setFiles(prev => [...prev, ...newFiles])
       // Clear previous results when new files are added
       setExtractedText(null)
+      setProcessedData(null)
       setSavedFilePath(null)
+      setDownloadPath(null)
     }
   }
 
@@ -92,7 +98,9 @@ export function TextExtractionSection() {
       setFiles(prev => [...prev, ...newFiles])
       // Clear previous results when new files are added
       setExtractedText(null)
+      setProcessedData(null)
       setSavedFilePath(null)
+      setDownloadPath(null)
     }
   }
 
@@ -101,7 +109,9 @@ export function TextExtractionSection() {
     setFiles(prev => prev.filter((_, i) => i !== index))
     // Clear previous results when files change
     setExtractedText(null)
+    setProcessedData(null)
     setSavedFilePath(null)
+    setDownloadPath(null)
   }
 
   // Process files and extract text
@@ -114,15 +124,17 @@ export function TextExtractionSection() {
     setIsProcessing(true)
     setActiveTab("processing")
     setSavedFilePath(null)
+    setDownloadPath(null)
+    setError(null)
     
     // Simulate progress
     let currentProgress = 0
-    const interval = setInterval(() => {
+    const progressInterval = setInterval(() => {
       currentProgress += 5
       setProgress(currentProgress)
 
       if (currentProgress >= 100) {
-        clearInterval(interval)
+        clearInterval(progressInterval)
       }
     }, 200)
     
@@ -145,7 +157,30 @@ export function TextExtractionSection() {
 
       const data = await response.json()
       
-      // Save to file in root folder
+      // Store extracted text
+      setExtractedText(data.results)
+      
+      // Process the extracted text using pandas
+      const processResponse = await fetch('/api/process-extracted-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ results: data.results }),
+      })
+      
+      if (!processResponse.ok) {
+        const errorData = await processResponse.json()
+        throw new Error(errorData.error || `Process API error: ${processResponse.status}`)
+      }
+      
+      const processResult = await processResponse.json()
+      
+      // Store the processed data and download path
+      setProcessedData(processResult.data)
+      setDownloadPath(processResult.downloadPath)
+      
+      // Save to file in root folder (original functionality kept for backward compatibility)
       const saveResponse = await fetch('/api/save-extracted-text', {
         method: 'POST',
         headers: {
@@ -163,23 +198,30 @@ export function TextExtractionSection() {
       // Store the path of the saved file
       setSavedFilePath(saveResult.filePath)
       
-      // Store extracted text for potential download
-      setExtractedText(data.results)
-      
       // Complete the process
       setTimeout(() => {
         setIsProcessing(false)
         setIsComplete(true)
         setActiveTab("results")
+        clearInterval(progressInterval) // Ensure interval is cleared
       }, 500)
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error extracting text:", error)
+      setError(error.message || "An unknown error occurred")
       setIsProcessing(false)
+      clearInterval(progressInterval) // Ensure interval is cleared
     }
   }
   
-  // Download extracted text as a file
+  // Download formatted data
+  const downloadFormattedData = () => {
+    if (downloadPath) {
+      window.open(downloadPath, '_blank')
+    }
+  }
+  
+  // Download raw extracted text as a file
   const downloadExtractedText = () => {
     if (!extractedText) return
     
@@ -201,12 +243,50 @@ export function TextExtractionSection() {
     setActiveTab("upload")
     setFiles([])
     setExtractedText(null)
+    setProcessedData(null)
     setSavedFilePath(null)
+    setDownloadPath(null)
     
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+  }
+
+  // Render section data table for a specific document
+  const renderSectionTable = (documentName: string, sectionData: any[]) => {
+    if (!sectionData || sectionData.length === 0) {
+      return (
+        <div key={documentName} className="mt-4">
+          <h4 className="font-medium text-lg mb-2">{documentName}</h4>
+          <p className="text-muted-foreground">No structured data available for this document.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div key={documentName} className="mt-4">
+        <h4 className="font-medium text-lg mb-2">{documentName}</h4>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-1/3 bg-muted">Section</TableHead>
+                <TableHead className="bg-muted">Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sectionData.map((item: any, index: number) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium align-top">{item.Section}</TableCell>
+                  <TableCell className="whitespace-pre-line">{item.Details}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -340,6 +420,13 @@ export function TextExtractionSection() {
                   <CheckCircle className="h-16 w-16 text-accent mb-4" />
                   <h3 className="text-xl font-medium mb-2">Extraction Complete!</h3>
                   
+                  {error && (
+                    <div className="my-4 p-4 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-md w-full">
+                      <p className="font-medium">Error processing text:</p>
+                      <p className="text-sm mt-1">{error}</p>
+                    </div>
+                  )}
+                  
                   {savedFilePath && (
                     <div className="my-4 p-4 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-md w-full">
                       <p className="font-medium">Text extraction successful!</p>
@@ -347,20 +434,47 @@ export function TextExtractionSection() {
                     </div>
                   )}
                   
-                  <div className="w-full p-4 bg-muted rounded-lg mt-4 mb-6 max-h-60 overflow-y-auto">
-                    <pre className="text-sm whitespace-pre-wrap break-words">
-                      {extractedText ? JSON.stringify(extractedText, null, 2) : "No extracted text available."}
-                    </pre>
-                  </div>
+                  {/* Display processed data in tabular format */}
+                  {processedData && (
+                    <div className="w-full overflow-auto max-h-[600px] mt-6 border rounded-md p-4">
+                      <h3 className="text-lg font-medium mb-4">Extracted Document Structure</h3>
+                      {Object.entries(processedData).length > 0 ? (
+                        Object.entries(processedData).map(([docName, sectionData]: [string, any]) => 
+                          renderSectionTable(docName, sectionData)
+                        )
+                      ) : (
+                        <p className="text-muted-foreground">No structured data available.</p>
+                      )}
+                    </div>
+                  )}
                   
-                  <div className="flex flex-wrap gap-4 justify-center">
+                  {/* Original raw data display (now hidden by default) */}
+                  {extractedText && (
+                    <div className="w-full p-4 bg-muted rounded-lg mt-4 mb-6 max-h-60 overflow-y-auto hidden">
+                      <pre className="text-sm whitespace-pre-wrap break-words">
+                        {JSON.stringify(extractedText, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-wrap gap-4 justify-center mt-6">
+                    {downloadPath && (
+                      <Button
+                        onClick={downloadFormattedData}
+                        className="gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90"
+                      >
+                        <FileJson className="h-4 w-4" />
+                        Download Structured Data
+                      </Button>
+                    )}
+                    
                     <Button
                       onClick={downloadExtractedText}
                       className="gap-2"
                       disabled={!extractedText}
                     >
                       <Download className="h-4 w-4" />
-                      Download Results
+                      Download Raw Data
                     </Button>
                     
                     <Button variant="outline" onClick={resetDemo}>
