@@ -12,7 +12,10 @@ export function DemoSection() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -38,8 +41,24 @@ export function DemoSection() {
   }, [])
 
   const handleUpload = () => {
-    setIsProcessing(true)
+    // Trigger the hidden file input click
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
 
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    
+    if (files && files.length > 0) {
+      processFile(files[0])
+    }
+  }
+
+  const processFile = (file: File) => {
+    // Start processing after file is selected
+    setIsProcessing(true)
+    
     // Simulate progress
     let currentProgress = 0
     const interval = setInterval(() => {
@@ -57,11 +76,44 @@ export function DemoSection() {
     }, 200)
   }
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      processFile(files[0])
+    }
+  }
+
   const resetDemo = () => {
     setIsProcessing(false)
     setProgress(0)
     setIsComplete(false)
     setActiveTab("upload")
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const requirements = [
@@ -141,12 +193,31 @@ export function DemoSection() {
               </TabsList>
 
               <TabsContent value="upload" className="mt-0">
-                <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-muted-foreground/25 rounded-lg">
+                <div 
+                  ref={dropZoneRef}
+                  className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg ${
+                    isDragging 
+                      ? "border-primary bg-primary/5" 
+                      : "border-muted-foreground/25"
+                  }`}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                >
                   <FileQuestion className="h-16 w-16 text-muted-foreground mb-4" />
                   <h3 className="text-xl font-medium mb-2">Upload Your Document</h3>
                   <p className="text-muted-foreground text-center max-w-md mb-6">
                     Drag and drop your document or click to browse. We support PDF, Word, Excel, and plain text files.
                   </p>
+                  {/* Hidden file input */}
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelected}
+                    className="hidden"
+                    accept=".pdf,.docx,.doc,.xlsx,.xls,.txt"
+                  />
                   <Button
                     onClick={handleUpload}
                     className="gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90"

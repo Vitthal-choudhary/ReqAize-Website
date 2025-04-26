@@ -72,6 +72,7 @@ export function Navbar() {
     { name: "Collaboration", href: "#collaboration" },
     { name: "Technology", href: "#tech-stack" },
     { name: "Security", href: "#security" },
+    { name: "Text Extractor", href: "/text-extractor" },
   ]
 
   const handleDemoClick = () => {

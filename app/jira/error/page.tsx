@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -12,7 +12,7 @@ const errorMessages = {
   server_error: 'A server error occurred during the authentication process.',
 };
 
-export default function JiraErrorPage() {
+function ErrorContent() {
   const searchParams = useSearchParams();
   const [errorMessage, setErrorMessage] = useState<string>('An unknown error occurred');
   
@@ -30,5 +30,13 @@ export default function JiraErrorPage() {
         <Link href="/">Return to Dashboard</Link>
       </Button>
     </div>
+  );
+}
+
+export default function JiraErrorPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center min-h-[60vh]">Loading...</div>}>
+      <ErrorContent />
+    </Suspense>
   );
 } 
