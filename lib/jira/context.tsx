@@ -72,9 +72,19 @@ export const JiraProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = () => {
     if (typeof window !== 'undefined') {
+      // Clear local storage
       localStorage.removeItem('jiraAuthState');
+      
+      // Clear any session storage items that might be related
+      sessionStorage.removeItem('jiraAuthState');
+      
+      // Set to initial state immediately
+      setAuthStateInternal({...initialState});
+      
+      // Clear any related application state
+      document.cookie = 'jira_auth_state=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      document.cookie = 'jira_auth_data=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     }
-    setAuthStateInternal(initialState);
   };
 
   return (

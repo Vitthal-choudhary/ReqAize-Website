@@ -135,18 +135,33 @@ export default function JiraIntegration() {
   const handleLogout = async () => {
     try {
       setIsLoading(true);
-      // Call logout API endpoint to clear server-side cookies
-      const response = await fetch('/api/jira/logout');
-      if (!response.ok) {
-        console.error('Failed to logout from JIRA API');
-      }
       
-      // Clear client-side state
+      // First, clear client-side state immediately to prevent UI showing logged in state
       logout();
       setProjects([]);
       setIssues([]);
+      
+      // Then call logout API endpoint to clear server-side cookies
+      const response = await fetch('/api/jira/logout', {
+        cache: 'no-store', // Prevent caching of the logout request
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to logout from JIRA API');
+        // Even if server-side logout fails, client is already logged out
+      }
+      
+      // Force reload the auth state from server after a small delay to ensure cookies are cleared
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
+      
     } catch (error) {
       console.error('Error during logout:', error);
+      // Even if there's an error, the UI should show logged out
     } finally {
       setIsLoading(false);
     }
