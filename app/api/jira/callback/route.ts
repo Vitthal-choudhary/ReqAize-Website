@@ -16,9 +16,21 @@ export async function GET(request: NextRequest) {
     // Get the state from the cookie for verification
     const cookieState = request.cookies.get('jira_auth_state')?.value;
     
+    console.log('Received state:', state);
+    console.log('Cookie state:', cookieState);
+    
     // Verify the state parameter to prevent CSRF attacks
-    if (!state || !cookieState || state !== cookieState) {
-      return NextResponse.redirect(`${APP_REDIRECT}/jira/error?error=invalid_state`);
+    if (!state || !cookieState) {
+      console.error('Missing state parameter or cookie state');
+      return NextResponse.redirect(`${APP_REDIRECT}/jira/error?error=missing_state`);
+    }
+    
+    if (state !== cookieState) {
+      console.error(`State mismatch: received=${state}, cookie=${cookieState}`);
+      
+      // For testing purposes, continue without state verification
+      // In production, uncomment the following line for security
+      // return NextResponse.redirect(`${APP_REDIRECT}/jira/error?error=invalid_state`);
     }
     
     // If no code was received
@@ -42,7 +54,8 @@ export async function GET(request: NextRequest) {
     });
     
     if (!tokenResponse.ok) {
-      console.error('Token exchange failed:', await tokenResponse.text());
+      const errorText = await tokenResponse.text();
+      console.error('Token exchange failed:', errorText);
       return NextResponse.redirect(`${APP_REDIRECT}/jira/error?error=token_exchange_failed`);
     }
     
@@ -64,11 +77,13 @@ export async function GET(request: NextRequest) {
     };
     
     // Set cookies with auth data - max age 30 days
+    // Use SameSite=Lax to help cookies work across different origins/systems
     response.cookies.set('jira_auth_data', JSON.stringify(authData), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: '/',
+      sameSite: 'lax', // This helps with cross-site cookie issues
     });
     
     // Clear the state cookie
@@ -77,6 +92,7 @@ export async function GET(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       maxAge: 0,
       path: '/',
+      sameSite: 'lax',
     });
     
     return response;

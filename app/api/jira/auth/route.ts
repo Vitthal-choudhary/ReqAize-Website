@@ -13,6 +13,7 @@ const generateState = () => {
 export async function GET(request: NextRequest) {
   try {
     const state = generateState();
+    console.log('Generated state:', state);
     
     // Store state in a cookie for verification during callback
     const stateExpiry = new Date();
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('prompt', 'consent');
     
+    console.log('Auth URL:', authUrl.toString());
+    console.log('Redirect URI:', REDIRECT_URI);
+    
     const response = NextResponse.redirect(authUrl.toString());
     
     // Set the state in a cookie
@@ -36,6 +40,7 @@ export async function GET(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       expires: stateExpiry,
       path: '/',
+      sameSite: 'lax', // Helps with cross-site cookie issues
     });
     
     return response;

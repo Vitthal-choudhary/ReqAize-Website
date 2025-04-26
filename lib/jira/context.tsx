@@ -17,8 +17,12 @@ type JiraContextType = {
 const JiraContext = createContext<JiraContextType | undefined>(undefined);
 
 export const JiraProvider = ({ children }: { children: ReactNode }) => {
-  const [authState, setAuthStateInternal] = useState<JiraAuthState>(() => {
-    // Try to load from localStorage on client-side
+  // Initialize with default state to prevent hydration errors
+  const [authState, setAuthStateInternal] = useState<JiraAuthState>(initialState);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load state from localStorage only after the component mounts (client-side)
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedState = localStorage.getItem('jiraAuthState');
       if (savedState) {
@@ -27,26 +31,27 @@ export const JiraProvider = ({ children }: { children: ReactNode }) => {
           // Check if token is expired
           if (parsed.expiresAt && parsed.expiresAt < Date.now()) {
             localStorage.removeItem('jiraAuthState');
-            return initialState;
+          } else {
+            setAuthStateInternal(parsed);
           }
-          return parsed;
         } catch (e) {
-          return initialState;
+          // If there's a parsing error, use initial state
+          console.error("Error parsing saved JIRA state:", e);
         }
       }
+      setIsInitialized(true);
     }
-    return initialState;
-  });
+  }, []);
 
   useEffect(() => {
-    if (authState.isAuthenticated && typeof window !== 'undefined') {
+    if (isInitialized && authState.isAuthenticated && typeof window !== 'undefined') {
       localStorage.setItem('jiraAuthState', JSON.stringify(authState));
     }
-  }, [authState]);
+  }, [authState, isInitialized]);
 
   useEffect(() => {
     const fetchCloudId = async () => {
-      if (authState.isAuthenticated && authState.accessToken && !authState.cloudId) {
+      if (isInitialized && authState.isAuthenticated && authState.accessToken && !authState.cloudId) {
         try {
           const cloudId = await fetchJiraCloudId(authState.accessToken);
           if (cloudId) {
@@ -59,7 +64,7 @@ export const JiraProvider = ({ children }: { children: ReactNode }) => {
     };
 
     fetchCloudId();
-  }, [authState.isAuthenticated, authState.accessToken]);
+  }, [authState.isAuthenticated, authState.accessToken, authState.cloudId, isInitialized]);
 
   const setAuthState = (newState: Partial<JiraAuthState>) => {
     setAuthStateInternal(prev => ({ ...prev, ...newState }));
