@@ -1,8 +1,7 @@
 import { Navbar } from "@/components/layout/navbar"
 import { HeroSection } from "@/components/sections/hero-section"
 import { FeaturesSection } from "@/components/sections/features-section"
-import { DemoSection } from "@/components/sections/demo-section"
-import { ChatbotPreview } from "@/components/chat/chatbot-preview"
+import { TextExtractionSection } from "@/components/sections/text-extraction-section"
 import { PrioritizationSection } from "@/components/sections/prioritization-section"
 import { CollaborationSection } from "@/components/sections/collaboration-section"
 import { DocumentGeneration } from "@/components/sections/document-generation"
@@ -17,8 +16,7 @@ export default function Home() {
       <Navbar />
       <HeroSection />
       <FeaturesSection />
-      <DemoSection />
-      <ChatbotPreview />
+      <TextExtractionSection />
       <PrioritizationSection />
       <CollaborationSection />
       <DocumentGeneration />
