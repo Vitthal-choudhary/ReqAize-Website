@@ -72,7 +72,7 @@ cd reqai
 
 2. Install frontend dependencies
 ```bash
-npm install
+npm install --legacy-peer-deps
 # or
 yarn install
 ```
