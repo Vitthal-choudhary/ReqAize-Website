@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileUp, FileText, CheckCircle, X, Download, Loader2, FileJson } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import JiraResultsDisplay from "@/components/results/JiraResultsDisplay"
 
 export function TextExtractionSection() {
   const [activeTab, setActiveTab] = useState("upload")
@@ -434,9 +435,16 @@ export function TextExtractionSection() {
                     </div>
                   )}
                   
-                  {/* Display processed data in tabular format */}
+                  {/* JIRA Generator Results */}
+                  {extractedText && (
+                    <div className="w-full mt-6">
+                      <JiraResultsDisplay extractedText={JSON.stringify(extractedText)} />
+                    </div>
+                  )}
+                  
+                  {/* Display processed data in tabular format - Now hidden by default */}
                   {processedData && (
-                    <div className="w-full overflow-auto max-h-[600px] mt-6 border rounded-md p-4">
+                    <div className="w-full overflow-auto max-h-[600px] mt-6 border rounded-md p-4 hidden">
                       <h3 className="text-lg font-medium mb-4">Extracted Document Structure</h3>
                       {Object.entries(processedData).length > 0 ? (
                         Object.entries(processedData).map(([docName, sectionData]: [string, any]) => 
