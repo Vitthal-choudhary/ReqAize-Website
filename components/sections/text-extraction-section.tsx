@@ -146,72 +146,93 @@ export function TextExtractionSection() {
         formData.append('files', file)
       })
 
-      // Send files to text extraction API
-      const response = await fetch('/api/extract-text', {
-        method: 'POST',
-        body: formData,
-      })
+      // Send files to text extraction API with timeout handling
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
+      try {
+        const response = await fetch('/api/extract-text', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`API error: ${response.status} - ${errorText}`)
+        }
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        const data = await response.json()
+        
+        // Store extracted text
+        setExtractedText(data.results)
+        
+        // Process the extracted text using pandas
+        const processResponse = await fetch('/api/process-extracted-text', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ results: data.results }),
+        })
+        
+        if (!processResponse.ok) {
+          const errorData = await processResponse.json()
+          throw new Error(errorData.error || `Process API error: ${processResponse.status}`)
+        }
+        
+        const processResult = await processResponse.json()
+        
+        // Store the processed data and download path
+        setProcessedData(processResult.data)
+        setDownloadPath(processResult.downloadPath)
+        
+        // Save to file in root folder (original functionality kept for backward compatibility)
+        const saveResponse = await fetch('/api/save-extracted-text', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ results: data.results }),
+        })
+        
+        if (!saveResponse.ok) {
+          throw new Error(`Failed to save extracted text: ${saveResponse.status}`)
+        }
+        
+        const saveResult = await saveResponse.json()
+        
+        // Store the path of the saved file
+        setSavedFilePath(saveResult.filePath)
+        
+        // Complete the process
+        setTimeout(() => {
+          setIsProcessing(false)
+          setIsComplete(true)
+          setActiveTab("results")
+          clearInterval(progressInterval) // Ensure interval is cleared
+        }, 500)
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. The server took too long to respond.')
+        } else {
+          throw fetchError
+        }
       }
-
-      const data = await response.json()
-      
-      // Store extracted text
-      setExtractedText(data.results)
-      
-      // Process the extracted text using pandas
-      const processResponse = await fetch('/api/process-extracted-text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ results: data.results }),
-      })
-      
-      if (!processResponse.ok) {
-        const errorData = await processResponse.json()
-        throw new Error(errorData.error || `Process API error: ${processResponse.status}`)
-      }
-      
-      const processResult = await processResponse.json()
-      
-      // Store the processed data and download path
-      setProcessedData(processResult.data)
-      setDownloadPath(processResult.downloadPath)
-      
-      // Save to file in root folder (original functionality kept for backward compatibility)
-      const saveResponse = await fetch('/api/save-extracted-text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ results: data.results }),
-      })
-      
-      if (!saveResponse.ok) {
-        throw new Error(`Failed to save extracted text: ${saveResponse.status}`)
-      }
-      
-      const saveResult = await saveResponse.json()
-      
-      // Store the path of the saved file
-      setSavedFilePath(saveResult.filePath)
-      
-      // Complete the process
-      setTimeout(() => {
-        setIsProcessing(false)
-        setIsComplete(true)
-        setActiveTab("results")
-        clearInterval(progressInterval) // Ensure interval is cleared
-      }, 500)
       
     } catch (error: any) {
       console.error("Error extracting text:", error)
       setError(error.message || "An unknown error occurred")
       setIsProcessing(false)
       clearInterval(progressInterval) // Ensure interval is cleared
+      
+      // Show the error in the UI
+      setTimeout(() => {
+        setActiveTab("upload") // Go back to upload tab on error
+      }, 1000)
     }
   }
   

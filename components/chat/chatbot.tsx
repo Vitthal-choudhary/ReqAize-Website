@@ -120,6 +120,7 @@ export function Chatbot({
   const [isDragging, setIsDragging] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showExportNotification, setShowExportNotification] = useState(false)
+  const [waitingForResponse, setWaitingForResponse] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
@@ -246,62 +247,80 @@ export function Chatbot({
         formData.append('files', file);
       });
 
-      // Send files to text extraction API
-      const response = await fetch('/api/extract-text', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
+      // Send files to text extraction API with timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      // Create a context message with the extracted text
-      const contextMessage: Message = {
-        role: "system",
-        content: `Extracted content from files: ${JSON.stringify(data.results)}`
-      };
-      
-      // Add the context message to our state (not visible to user)
-      const updatedMessages = [...messages, contextMessage];
-      
-      // Use the existing input as the prompt or use a default prompt
-      const promptText = input.trim() || "Analyze the content from these files";
-      const userMessage: Message = {
-        role: "user",
-        content: promptText
-      };
-      
-      // Add user message to the UI and set messages
-      setMessages(prev => [...prev, userMessage]);
-      
-      // Call Mistral with the prompt and include context
-      const aiResponse = await callMistralAPI([...updatedMessages, userMessage]);
-      
-      // Add AI response
-      const assistantMessage = { 
-        role: "assistant" as const, 
-        content: aiResponse 
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // Save the assistant message to the responses file
       try {
-        await fetch('/api/save-chat-response', {
+        // Send files to text extraction API
+        const response = await fetch('/api/extract-text', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ message: assistantMessage }),
+          body: formData,
+          signal: controller.signal
         });
-      } catch (saveError) {
-        console.error('Error saving chat response:', saveError);
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        
+        // Create a context message with the extracted text
+        const contextMessage: Message = {
+          role: "system",
+          content: `Extracted content from files: ${JSON.stringify(data.results)}`
+        };
+        
+        // Add the context message to our state (not visible to user)
+        const updatedMessages = [...messages, contextMessage];
+        
+        // Use the existing input as the prompt or use a default prompt
+        const promptText = input.trim() || "Analyze the content from these files";
+        const userMessage: Message = {
+          role: "user",
+          content: promptText
+        };
+        
+        // Add user message to the UI and set messages
+        setMessages(prev => [...prev, userMessage]);
+        
+        // Call Mistral with the prompt and include context
+        const aiResponse = await callMistralAPI([...updatedMessages, userMessage]);
+        
+        // Add AI response
+        const assistantMessage = { 
+          role: "assistant" as const, 
+          content: aiResponse 
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+        setWaitingForResponse(true);
+        
+        // Save the assistant message to the responses file
+        try {
+          await fetch('/api/save-chat-response', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: assistantMessage }),
+          });
+        } catch (saveError) {
+          console.error('Error saving chat response:', saveError);
+        }
+        
+        setInput("");
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. The server took too long to respond.');
+        } else {
+          throw fetchError;
+        }
       }
-      
-      setInput("");
       
     } catch (error) {
       console.error("Error processing files:", error);
@@ -309,7 +328,7 @@ export function Chatbot({
       // Add error message
       const errorMessage: Message = {
         role: "assistant",
-        content: "Error processing files. Please try again."
+        content: `Error processing files: ${(error as Error).message || "Unknown error occurred"}. Please try again or try a different file.`
       };
       
       setMessages(prev => [...prev, errorMessage]);

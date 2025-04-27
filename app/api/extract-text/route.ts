@@ -35,10 +35,18 @@ export async function POST(req: NextRequest) {
     // Save files to temp directory and collect their paths
     const filePaths: string[] = [];
     for (const file of files) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const filePath = join(uploadDir, file.name);
-      await writeFile(filePath, buffer);
-      filePaths.push(filePath);
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const filePath = join(uploadDir, file.name);
+        await writeFile(filePath, buffer);
+        filePaths.push(filePath);
+      } catch (fileError) {
+        console.error(`Error saving file ${file.name}:`, fileError);
+        return NextResponse.json(
+          { error: `Error saving file: ${file.name}`, details: (fileError as Error).message },
+          { status: 500 }
+        );
+      }
     }
 
     try {
@@ -47,6 +55,15 @@ export async function POST(req: NextRequest) {
       const filePathArgs = filePaths.map(path => `"${path}"`).join(' ');
       
       console.log(`Running extraction with batch script: ${batchScript} ${filePathArgs}`);
+      
+      // Check if batch script exists
+      if (!fs.existsSync(batchScript)) {
+        console.error('Batch script not found:', batchScript);
+        return NextResponse.json(
+          { error: 'Extraction script not found', details: `Script path: ${batchScript}` },
+          { status: 500 }
+        );
+      }
       
       // Run the batch script with file paths as arguments
       const { stdout, stderr } = await execPromise(`"${batchScript}" ${filePathArgs}`);
