@@ -8,6 +8,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import ReactMarkdown from 'react-markdown'
 import { useAuth } from "@/components/auth/AuthContext"
 import { LoginModal } from "@/components/auth/LoginModal"
+import { Document, Paragraph, Packer, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign } from 'docx';
+import { saveAs } from 'file-saver';
 
 // Store chat history outside the component to persist across sessions
 let chatHistory: Message[] = [];
@@ -537,35 +539,248 @@ export function Chatbot({
     // Get the last assistant message
     const lastResponse = assistantMessages[assistantMessages.length - 1].content;
     
-    // Create a JSON object with the response
-    const brdData = {
-      timestamp: new Date().toISOString(),
-      content: lastResponse
-    };
+    // Remove markdown formatting and asterisks
+    const cleanContent = lastResponse.replace(/\\/g, '').replace(/\*/g, '');
     
-    // Convert to JSON string
-    const jsonData = JSON.stringify(brdData, null, 2);
+    // Parse content into sections
+    const sections = parseContentIntoSections(cleanContent);
     
-    // Create a Blob with the JSON data
-    const blob = new Blob([jsonData], { type: 'application/json' });
+    // Create document with title
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            text: "BUSINESS REQUIREMENTS DOCUMENT",
+            heading: HeadingLevel.HEADING_1,
+            alignment: 'center',
+            spacing: {
+              after: 200
+            }
+          }),
+          // Main content table with all sections
+          createStructuredTable(sections)
+        ],
+      }],
+    });
     
-    // Create URL for the Blob
-    const url = URL.createObjectURL(blob);
+    // Generate Word document as a blob
+    Packer.toBlob(doc).then((blob: Blob) => {
+      // Save the blob as a file with a descriptive name
+      saveAs(blob, "Business_Requirements_Document.docx");
+      
+      // Show notification
+      setShowExportNotification(true);
+      setTimeout(() => setShowExportNotification(false), 3000);
+    });
+  };
+  
+  // Helper function to parse content into sections
+  const parseContentIntoSections = (content: string): Record<string, string> => {
+    const sections: Record<string, string> = {};
+    const lines = content.split('\n');
     
-    // Create a link element to trigger download
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `BRD_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
+    let currentSection = '';
+    let currentContent: string[] = [];
     
-    // Clean up
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    // Common section headers in requirements documents
+    const sectionHeaders = [
+      'Objective', 'Executive Summary', 'Stakeholders', 'Functional Requirements', 
+      'Non-Functional Requirements', 'Constraints', 'Timeline', 'Budget', 
+      'Project Phases', 'RAID Analysis', 'Risks', 'Assumptions', 'Issues',
+      'Dependencies', 'Business Rules', 'Definitions'
+    ];
     
-    // Show notification
-    setShowExportNotification(true);
-    setTimeout(() => setShowExportNotification(false), 3000);
+    // Process each line
+    lines.forEach(line => {
+      // Check if this line is a section header
+      const headerMatch = line.match(/^#+\s+(.+)/) || line.match(/^([A-Z][a-zA-Z\s]+):/);
+      const isHeader = headerMatch || sectionHeaders.some(header => 
+        line.toLowerCase().includes(header.toLowerCase() + ':') || 
+        line.toLowerCase() === header.toLowerCase()
+      );
+      
+      if (isHeader) {
+        // Found a new section
+        
+        // Save the previous section if we have one
+        if (currentSection && currentContent.length > 0) {
+          sections[currentSection] = currentContent.join('\n');
+        }
+        
+        // Extract section name
+        if (headerMatch && headerMatch[1]) {
+          currentSection = headerMatch[1].replace(/:/g, '').trim();
+        } else {
+          // Try to find which section header is in the line
+          const matchedHeader = sectionHeaders.find(h => 
+            line.toLowerCase().includes(h.toLowerCase() + ':') || 
+            line.toLowerCase() === h.toLowerCase()
+          );
+          currentSection = matchedHeader || 'Miscellaneous';
+        }
+          
+        // Reset content collection
+        currentContent = [];
+      } else if (line.trim() && currentSection) {
+        // Add line to current section
+        currentContent.push(line.trim());
+      }
+    });
+    
+    // Add the last section
+    if (currentSection && currentContent.length > 0) {
+      sections[currentSection] = currentContent.join('\n');
+    }
+    
+    return sections;
+  };
+  
+  // Helper function to create a structured table for the document
+  const createStructuredTable = (sections: Record<string, string>): Table => {
+    // Create rows for the table
+    const rows: TableRow[] = [
+      // Header row
+      new TableRow({
+        children: [
+          new TableCell({
+            width: {
+              size: 20,
+              type: WidthType.PERCENTAGE,
+            },
+            children: [
+              new Paragraph({
+                text: "Section",
+                style: "strong",
+              })
+            ],
+            shading: {
+              fill: "F2F2F2",
+            },
+          }),
+          new TableCell({
+            width: {
+              size: 80,
+              type: WidthType.PERCENTAGE,
+            },
+            children: [
+              new Paragraph({
+                text: "Details",
+                style: "strong",
+              })
+            ],
+            shading: {
+              fill: "F2F2F2",
+            },
+          }),
+        ],
+      }),
+    ];
+    
+    // Add each section to the rows array
+    Object.keys(sections).forEach(sectionName => {
+      const content = sections[sectionName];
+      
+      // Format section name to ensure correct capitalization
+      // Convert first letter to uppercase and rest to lowercase if it's all uppercase
+      const formattedSectionName = sectionName.replace(/^\w/, c => c.toUpperCase());
+      
+      // Add section row to the rows array
+      rows.push(
+        new TableRow({
+          children: [
+            // First column - Section name
+            new TableCell({
+              width: {
+                size: 20,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                new Paragraph({
+                  text: formattedSectionName,
+                  style: "strong",
+                }),
+              ],
+              verticalAlign: VerticalAlign.TOP, // Align text to top
+            }),
+            // Second column - Content
+            new TableCell({
+              width: {
+                size: 80,
+                type: WidthType.PERCENTAGE,
+              },
+              children: processContentForCell(content),
+              verticalAlign: VerticalAlign.TOP, // Align text to top
+            }),
+          ],
+        })
+      );
+    });
+    
+    // Create the table with all rows
+    return new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+      },
+      rows: rows,
+    });
+  };
+  
+  // Helper function to process content text into appropriate paragraphs
+  const processContentForCell = (content: string): Paragraph[] => {
+    const paragraphs: Paragraph[] = [];
+    const lines = content.split('\n');
+    
+    lines.forEach(line => {
+      if (line.trim()) {
+        // Handle bullet points that start with dash
+        if (line.match(/^\s*-\s+/)) {
+          paragraphs.push(
+            new Paragraph({
+              text: line, // Keep the dash for the exact formatting in the screenshot
+              spacing: {
+                before: 80,
+                after: 80,
+              }
+            })
+          );
+        } 
+        // Format numbered lists
+        else if (line.match(/^\s*\d+[\.)\]]\s+/)) {
+          paragraphs.push(
+            new Paragraph({
+              text: line,
+              spacing: {
+                before: 80,
+                after: 80,
+              }
+            })
+          );
+        } 
+        // Regular text
+        else {
+          paragraphs.push(
+            new Paragraph({
+              text: line,
+              spacing: {
+                after: 120, // Add spacing after paragraphs
+              }
+            })
+          );
+        }
+      }
+    });
+    
+    return paragraphs;
   };
 
   // Full chatbot UI
