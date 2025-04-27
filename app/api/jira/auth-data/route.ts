@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
         accessToken: authData.accessToken,
         refreshToken: authData.refreshToken,
         expiresAt: authData.expiresAt,
+        cloudId: authData.cloudId
       }, { status: 200 });
     } catch (error) {
       console.error('Error parsing auth data:', error);

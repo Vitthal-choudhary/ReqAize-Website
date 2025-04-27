@@ -13,6 +13,16 @@ export default function JiraResultsDisplay({ extractedText }: JiraResultsDisplay
   const [result, setResult] = useState<JiraDemoResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [jiraProjects, setJiraProjects] = useState<{id: string, key: string, name: string}[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [isJiraAuthenticated, setIsJiraAuthenticated] = useState(false);
+  const [isSendingToJira, setIsSendingToJira] = useState(false);
+  const [jiraSendResult, setJiraSendResult] = useState<{success: boolean, message: string} | null>(null);
+
+  // Check JIRA authentication status when component mounts
+  useEffect(() => {
+    checkJiraAuth();
+  }, []);
 
   // Generate JIRA items when component mounts if extractedText is available
   useEffect(() => {
@@ -20,6 +30,55 @@ export default function JiraResultsDisplay({ extractedText }: JiraResultsDisplay
       generateJiraItems();
     }
   }, [extractedText]);
+
+  // Fetch JIRA projects when authentication status changes
+  useEffect(() => {
+    if (isJiraAuthenticated) {
+      fetchJiraProjects();
+    }
+  }, [isJiraAuthenticated]);
+
+  // Check if user is authenticated with JIRA
+  const checkJiraAuth = async () => {
+    try {
+      const response = await fetch('/api/jira/auth-data');
+      const data = await response.json();
+      
+      setIsJiraAuthenticated(data.isAuthenticated);
+    } catch (error) {
+      console.error('Error checking JIRA auth:', error);
+      setIsJiraAuthenticated(false);
+    }
+  };
+
+  // Fetch JIRA projects
+  const fetchJiraProjects = async () => {
+    try {
+      // First, get the cloud ID
+      const authResponse = await fetch('/api/jira/auth-data');
+      const authData = await authResponse.json();
+      
+      if (!authData.isAuthenticated || !authData.accessToken || !authData.cloudId) {
+        return;
+      }
+      
+      // Get the list of projects
+      const projectsResponse = await fetch(`/api/jira/projects?cloudId=${authData.cloudId}`, {
+        headers: {
+          'Authorization': `Bearer ${authData.accessToken}`
+        }
+      });
+      
+      if (!projectsResponse.ok) {
+        throw new Error('Failed to fetch JIRA projects');
+      }
+      
+      const projectsData = await projectsResponse.json();
+      setJiraProjects(projectsData);
+    } catch (error) {
+      console.error('Error fetching JIRA projects:', error);
+    }
+  };
 
   const generateJiraItems = async () => {
     if (!extractedText || isLoading) return;
@@ -76,6 +135,54 @@ export default function JiraResultsDisplay({ extractedText }: JiraResultsDisplay
     // Clean up
     URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  };
+  
+  const sendToJira = async () => {
+    if (!result || !selectedProject || isSendingToJira) return;
+    
+    setIsSendingToJira(true);
+    setJiraSendResult(null);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/jira/create-issues', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectKey: selectedProject,
+          items: result.structuredItems
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Failed to create JIRA issues');
+      }
+      
+      setJiraSendResult({
+        success: true,
+        message: data.message
+      });
+    } catch (err) {
+      console.error('Error sending to JIRA:', err);
+      setJiraSendResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to create JIRA issues'
+      });
+    } finally {
+      setIsSendingToJira(false);
+    }
+  };
+  
+  const handleProjectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedProject(event.target.value);
+  };
+  
+  const connectToJira = () => {
+    window.location.href = '/api/jira/auth';
   };
   
   const tryAgain = () => {
@@ -197,149 +304,136 @@ export default function JiraResultsDisplay({ extractedText }: JiraResultsDisplay
         </div>
       </div>
       
+      {/* JIRA Integration Section */}
+      <div className="bg-gray-800 rounded-md p-4 mb-4">
+        <h3 className="text-sm font-semibold mb-3">Send to JIRA</h3>
+        
+        {!isJiraAuthenticated ? (
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-3">
+              Connect to JIRA to import these items directly into your JIRA project.
+            </p>
+            <Button variant="default" size="sm" onClick={connectToJira}>
+              Connect to JIRA
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <div className="w-full">
+                <label htmlFor="project-select" className="text-xs text-muted-foreground mb-1 block">
+                  Select JIRA Project
+                </label>
+                <select 
+                  id="project-select"
+                  value={selectedProject}
+                  onChange={handleProjectChange}
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  disabled={isSendingToJira || jiraProjects.length === 0}
+                >
+                  <option value="">Select a project</option>
+                  {jiraProjects.map(project => (
+                    <option key={project.id} value={project.key}>
+                      {project.name} ({project.key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="self-end"
+                disabled={!selectedProject || isSendingToJira}
+                onClick={sendToJira}
+              >
+                {isSendingToJira ? 'Sending...' : 'Send to JIRA'}
+              </Button>
+            </div>
+            
+            {jiraSendResult && (
+              <div className={`text-sm p-2 rounded-md ${jiraSendResult.success ? 'bg-green-800/30 text-green-400' : 'bg-red-800/30 text-red-400'}`}>
+                {jiraSendResult.message}
+              </div>
+            )}
+            
+            {jiraProjects.length === 0 && !isSendingToJira && (
+              <p className="text-xs text-amber-400">
+                No JIRA projects found. Make sure you have access to at least one project.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+      
       {/* JIRA Items Display - Hierarchical View */}
-      {hierarchicalItems && (
-        <div className="bg-slate-800 border border-slate-700 rounded-md overflow-auto flex-grow p-4 mb-4 max-h-[50vh]">
-          <div className="space-y-6">
+      {hierarchicalItems && hierarchicalItems.length > 0 && (
+        <div className="flex-grow overflow-auto mb-4 border border-gray-800 rounded-md">
+          <div className="p-4 space-y-4">
             {hierarchicalItems.map((epic, epicIndex) => (
-              <div key={epicIndex} className="border-l-4 border-blue-600 pl-4 py-1">
-                {/* Epic */}
-                <div className="border border-slate-700 rounded-md p-3 bg-slate-800 hover:bg-slate-700 transition-colors mb-3">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2">
-                        Epic
-                      </span>
-                      {epic.priority && (
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          epic.priority === 'Highest' ? 'bg-red-100 text-red-800' :
-                          epic.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                          epic.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                          epic.priority === 'Low' ? 'bg-green-100 text-green-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {epic.priority}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <h3 className="text-white font-medium text-base mb-2">{epic.summary}</h3>
-                  <p className="text-slate-300 text-sm">{epic.description}</p>
-                  
-                  {epic.labels && epic.labels.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {epic.labels.map((label, i) => (
-                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-300">
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+              <div key={epicIndex} className="border-l-4 border-blue-600 pl-4 py-2">
+                <div className="flex items-center">
+                  <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-0.5 rounded-full mr-2">Epic</span>
+                  <h3 className="font-semibold">{epic.summary}</h3>
                 </div>
                 
-                {/* Stories under this Epic */}
-                <div className="ml-4 space-y-4">
-                  {epic.stories && epic.stories.map((story, storyIndex) => (
-                    <div key={storyIndex} className="border-l-4 border-green-600 pl-4 py-1">
-                      {/* Story */}
-                      <div className="border border-slate-700 rounded-md p-3 bg-slate-800 hover:bg-slate-700 transition-colors mb-2">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
-                              Story
-                            </span>
-                            {story.priority && (
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                story.priority === 'Highest' ? 'bg-red-100 text-red-800' :
-                                story.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                                story.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                story.priority === 'Low' ? 'bg-green-100 text-green-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
-                                {story.priority}
-                              </span>
-                            )}
-                          </div>
+                {showAll && (
+                  <p className="text-sm text-muted-foreground mt-1 mb-2">{epic.description}</p>
+                )}
+                
+                {epic.stories && epic.stories.length > 0 && (
+                  <div className="mt-3 ml-4 space-y-3">
+                    {epic.stories.map((story, storyIndex) => (
+                      <div key={storyIndex} className="border-l-4 border-green-600 pl-4 py-2">
+                        <div className="flex items-center">
+                          <span className="text-xs bg-green-600/20 text-green-400 px-2 py-0.5 rounded-full mr-2">Story</span>
+                          <h4 className="font-medium text-sm">{story.summary}</h4>
                         </div>
                         
-                        <h3 className="text-white font-medium text-sm mb-2">{story.summary}</h3>
-                        <p className="text-slate-300 text-xs">{showAll ? story.description : `${story.description.slice(0, 100)}${story.description.length > 100 ? '...' : ''}`}</p>
-                        
-                        {story.labels && story.labels.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {story.labels.map((label, i) => (
-                              <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-300">
-                                {label}
-                              </span>
-                            ))}
-                          </div>
+                        {showAll && (
+                          <p className="text-xs text-muted-foreground mt-1 mb-2">{story.description}</p>
                         )}
-                      </div>
-                      
-                      {/* Tasks under this Story - Only show if showAll or if we have less than 5 stories */}
-                      {(showAll || epic.stories.length < 5) && story.tasks && (
-                        <div className="ml-4 space-y-3">
-                          {story.tasks.map((task, taskIndex) => (
-                            <div key={taskIndex} className="border-l-4 border-yellow-500 pl-4 py-1">
-                              {/* Task */}
-                              <div className="border border-slate-700 rounded-md p-2 bg-slate-800 hover:bg-slate-700 transition-colors mb-2">
-                                <div className="flex justify-between items-start mb-1">
-                                  <div className="flex items-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">
-                                      Task
-                                    </span>
-                                    {task.priority && (
-                                      <span className={`inline-flex items-center px-2 py-0 rounded-full text-xs font-medium ${
-                                        task.priority === 'Highest' ? 'bg-red-100 text-red-800' :
-                                        task.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                                        task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                                        task.priority === 'Low' ? 'bg-green-100 text-green-800' :
-                                        'bg-blue-100 text-blue-800'
-                                      }`}>
-                                        {task.priority}
-                                      </span>
-                                    )}
-                                  </div>
+                        
+                        {story.tasks && story.tasks.length > 0 && (
+                          <div className="mt-2 ml-4 space-y-2">
+                            {story.tasks.map((task, taskIndex) => (
+                              <div key={taskIndex} className="border-l-4 border-yellow-600 pl-4 py-2">
+                                <div className="flex items-center">
+                                  <span className="text-xs bg-yellow-600/20 text-yellow-400 px-2 py-0.5 rounded-full mr-2">Task</span>
+                                  <h5 className="text-sm">{task.summary}</h5>
                                 </div>
                                 
-                                <h3 className="text-white font-medium text-xs mb-1">{task.summary}</h3>
-                                
-                                {/* Only show subtasks count by default */}
-                                {!showAll && task.subtasks && task.subtasks.length > 0 && (
-                                  <div className="text-xs text-slate-400 mt-1">
-                                    + {task.subtasks.length} subtasks
-                                  </div>
+                                {showAll && (
+                                  <p className="text-xs text-muted-foreground mt-1 mb-2">{task.description}</p>
                                 )}
                                 
-                                {/* Subtasks under this Task - Only visible if showAll is true */}
-                                {showAll && task.subtasks && task.subtasks.length > 0 && (
-                                  <div className="ml-4 mt-2 space-y-2">
+                                {task.subtasks && task.subtasks.length > 0 && (
+                                  <div className="mt-2 ml-4 space-y-2">
                                     {task.subtasks.map((subtask, subtaskIndex) => (
-                                      <div key={subtaskIndex} className="border-l-4 border-purple-500 pl-2 py-1">
+                                      <div key={subtaskIndex} className="border-l-4 border-purple-600 pl-4 py-1">
                                         <div className="flex items-center">
-                                          <span className="inline-flex items-center px-1 py-0 rounded-full text-xs font-medium bg-purple-100 text-purple-800 mr-1">
-                                            Sub
-                                          </span>
-                                          <span className="text-xs text-white">{subtask.summary}</span>
+                                          <span className="text-xs bg-purple-600/20 text-purple-400 px-2 py-0.5 rounded-full mr-2">Sub-task</span>
+                                          <h6 className="text-xs">{subtask.summary}</h6>
                                         </div>
+                                        
+                                        {showAll && (
+                                          <p className="text-xs text-muted-foreground mt-1">{subtask.description}</p>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
                                 )}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
           
-          {/* Show/Hide details button */}
           <div className="text-center mt-4">
             <Button
               variant="outline"

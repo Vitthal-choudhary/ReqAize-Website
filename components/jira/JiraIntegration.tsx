@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useJira } from '@/lib/jira/context';
-import { fetchJiraProjects, fetchJiraIssues } from '@/lib/jira/api';
+import { fetchJiraProjects, fetchJiraIssues, fetchJiraCloudId } from '@/lib/jira/api';
 import { JiraProject, JiraIssue, AtlassianDocument, AtlassianDocumentContent } from '@/lib/jira/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import JiraDebug from './JiraDebug';
 
 // Helper function to convert Atlassian Document to plain text
 const extractTextFromDocument = (doc: AtlassianDocument | AtlassianDocumentContent | string | undefined): string => {
@@ -58,6 +59,18 @@ export default function JiraIntegration() {
             refreshToken: data.refreshToken,
             expiresAt: data.expiresAt,
           });
+          
+          // Fetch cloud ID if not present in auth state
+          if (!authState.cloudId && data.accessToken) {
+            try {
+              const cloudId = await fetchJiraCloudId(data.accessToken);
+              if (cloudId) {
+                setAuthState({ cloudId });
+              }
+            } catch (err) {
+              console.error('Error fetching cloud ID:', err);
+            }
+          }
         }
       } catch (error) {
         console.error('Error fetching auth data:', error);
@@ -65,7 +78,7 @@ export default function JiraIntegration() {
     };
 
     fetchAuthData();
-  }, [setAuthState]);
+  }, [setAuthState, authState.cloudId]);
 
   // Fetch projects when authenticated
   useEffect(() => {
@@ -190,7 +203,7 @@ export default function JiraIntegration() {
                 </Button>
               </div>
               
-              {projects.length > 0 && (
+              {projects.length > 0 ? (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Project</label>
                   <Select 
@@ -208,6 +221,53 @@ export default function JiraIntegration() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-900/30 border border-yellow-600 rounded">
+                  <h3 className="text-sm font-semibold mb-2">No JIRA projects found</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    We couldn't find any projects in your JIRA account. This could be due to:
+                  </p>
+                  <ul className="text-sm list-disc list-inside space-y-1 mb-3">
+                    <li>You don't have access to any projects in your JIRA instance</li>
+                    <li>There was an issue connecting to your JIRA account</li>
+                    <li>Your authentication has expired</li>
+                  </ul>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        setIsLoading(true);
+                        // Re-fetch projects
+                        if (authState.accessToken && authState.cloudId) {
+                          fetchJiraProjects(authState.accessToken, authState.cloudId)
+                            .then(data => {
+                              setProjects(data);
+                              setIsLoading(false);
+                            })
+                            .catch(error => {
+                              console.error('Error refreshing projects:', error);
+                              setError('Failed to refresh projects. Please try reconnecting.');
+                              setIsLoading(false);
+                            });
+                        } else {
+                          setIsLoading(false);
+                          setError('Missing access token or cloud ID. Please reconnect.');
+                        }
+                      }}
+                      disabled={isLoading}
+                    >
+                      Refresh Projects
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleLogout}
+                      disabled={isLoading}
+                    >
+                      Reconnect
+                    </Button>
+                  </div>
                 </div>
               )}
               
@@ -269,6 +329,8 @@ export default function JiraIntegration() {
           </CardContent>
         </Card>
       )}
+      
+      <JiraDebug />
     </div>
   );
 } 

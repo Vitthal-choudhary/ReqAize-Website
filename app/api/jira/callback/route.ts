@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchJiraCloudId } from '@/lib/jira/api';
 
 // Replace with your own credentials from Atlassian Developer Console
 const JIRA_CLIENT_ID = process.env.JIRA_CLIENT_ID || '';
@@ -64,6 +65,43 @@ export async function GET(request: NextRequest) {
     // Calculate token expiry time
     const expiresAt = Date.now() + tokenData.expires_in * 1000;
     
+    // Get the cloud ID to store it for future use
+    let cloudId = null;
+    try {
+      console.log('Fetching cloud ID...');
+      cloudId = await fetchJiraCloudId(tokenData.access_token);
+      console.log('Fetched cloud ID:', cloudId);
+      
+      if (!cloudId) {
+        // If fetchJiraCloudId returned null, try to fetch cloud ID directly
+        console.log('Trying alternate method to fetch cloud ID...');
+        const resourcesResponse = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
+          headers: {
+            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (resourcesResponse.ok) {
+          const resources = await resourcesResponse.json();
+          if (resources && resources.length > 0) {
+            cloudId = resources[0].id;
+            console.log('Fetched cloud ID using alternate method:', cloudId);
+          }
+        } else {
+          console.error('Failed to fetch resources:', await resourcesResponse.text());
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching cloud ID:', error);
+      // Continue even if we couldn't fetch the cloud ID
+    }
+    
+    if (!cloudId) {
+      console.error('Could not fetch cloud ID');
+      // We'll continue without a cloud ID, but the user will need to reconnect
+    }
+    
     // Create a response that redirects to the frontend with the token data
     const response = NextResponse.redirect(`${APP_REDIRECT}/jira/success`);
     
@@ -74,7 +112,10 @@ export async function GET(request: NextRequest) {
       refreshToken: tokenData.refresh_token,
       expiresAt,
       isAuthenticated: true,
+      cloudId
     };
+    
+    console.log('Setting auth data with cloud ID:', cloudId);
     
     // Set cookies with auth data - max age 30 days
     // Use SameSite=Lax to help cookies work across different origins/systems
