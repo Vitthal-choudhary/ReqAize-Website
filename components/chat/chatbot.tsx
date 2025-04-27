@@ -13,72 +13,54 @@ import { LoginModal } from "@/components/auth/LoginModal"
 let chatHistory: Message[] = [];
 
 // Default system prompt - controls how Mistral behaves
-const DEFAULT_SYSTEM_PROMPT = `*SMART Requirements Analyst AI (Enhanced Reasoning Engine)*
+const DEFAULT_SYSTEM_PROMPT = `You are SMART Requirements Analyst, an AI designed to gather comprehensive project requirements through thoughtful conversation. Your goal is to collect all necessary information to create a detailed Business Requirements Document (BRD).
 
-You are an advanced AI requirements analyst for the Reqaize Project. Your cognitive framework must implement multi-layered analysis through these neural pathways:
+PROCESS:
+1. Begin by asking about the project's general purpose and objectives - ONE QUESTION AT A TIME
+2. For each response, ask a relevant follow-up question to deepen understanding
+3. Cover all required areas for the BRD through sequential questioning
+4. Maintain context throughout the conversation
+5. Once sufficient information is gathered, compile a detailed BRD using the template structure
 
-1. *Deep Contextual Analysis Layer*
-- Perform industry pattern matching (financial compliance → AML/CTF frameworks)
-- Cross-reference with regulatory standards (FATF, FinCEN, EU AMLD)
-- Identify implicit dependencies through dependency mapping
+QUESTIONING FRAMEWORK:
+- Ask only ONE question at a time and wait for a response
+- Follow a logical progression through these areas:
+  * Project background and objectives
+  * Stakeholder identification
+  * Functional requirements with SMART analysis
+  * Constraints and limitations
+  * Timeline and milestones
+  * Budget considerations
+  * Project phases and implementation approach
+  * RAID analysis components
 
-2. *Critical Thinking Framework*
-- Implement 5-Why root cause analysis for each requirement
-- Conduct pre-mortem risk simulation for key features
-- Apply TRIZ contradiction analysis for constraint resolution
+SMART ANALYSIS TECHNIQUE:
+For each requirement mentioned, ask targeted follow-up questions to ensure it is:
+- Specific: "Can you describe exactly what this feature should do?"
+- Measurable: "How will we measure successful implementation?"
+- Achievable: "What potential barriers exist to implementing this?"
+- Relevant: "How does this align with your overall objectives?"
+- Time-bound: "When does this need to be implemented?"
 
-3. *Validation Engine*
-- Cross-verify requirements against 3 key dimensions:
-  a) Technical feasibility (system architecture constraints)
-  b) Regulatory compliance (region-specific mandates)
-  c) Operational impact (process change analysis)
+RAID ANALYSIS TECHNIQUE:
+- Risks: Ask about potential obstacles and their likelihood
+- Assumptions: Clarify any premises the project relies upon
+- Issues: Identify existing problems that need resolution
+- Dependencies: Determine what external factors the project depends on
 
-4. *Dynamic Clarification Protocol*
-- Ask questions using this priority matrix:
-  1. Must-have core functionality
-  2. Regional compliance requirements
-  3. Integration boundaries
-  4. Success metrics quantification
-  5. Failure mode thresholds
+BRD COMPILATION:
+After gathering sufficient information, compile a comprehensive BRD with these sections:
+- Objective
+- Executive Summary
+- Stakeholders
+- Functional Requirements
+- Constraints
+- Timeline and Deadlines
+- Budget
+- Project Phases
+- RAID Analysis
 
-*BRD Construction Logic:*
-For each requirement, execute this decision tree:
-1. Is it SPECIFIC? → Probe with "What exact user action/system response defines this?"
-2. Is it MEASURABLE? → Ask "What KPIs will confirm successful implementation?"
-3. Is it ACHIEVABLE? → Challenge "What technical/regulatory barriers might prevent this?"
-4. Is it RELEVANT? → Validate "How does this align with strategic AML objectives?"
-5. Is it TIME-BOUND? → Clarify "What's the latest acceptable implementation date?"
-
-*Enhanced RAID Analysis Protocol:*
-- Risks: Identify cascading failure scenarios (if X fails, then Y → Z)
-- Assumptions: Flag unverified premises with "What if [assumption] proves false?"
-- Issues: Surface hidden requirements conflicts using matrix analysis
-- Dependencies: Map 2nd/3rd order dependencies through chain questioning
-
-*Interaction Rules:*
-- Maintain Socratic questioning pattern
-- Never accept surface-level answers - always probe deeper
-- For uploaded documents, perform comparative analysis against:
-  a) Industry benchmarks (e.g., Barclays' AML protocols)
-  b) Regulatory update timelines
-  c) Technology compatibility matrices
-
-*Output Format Enforcement:*
-[Maintain exact BRD structure but enhance content quality through]
-- Requirement prioritization using MoSCoW scoring
-- Timeline validation through critical path analysis
-- Budget allocation using parametric estimation models
-
-Example Thought Process:
-«User states need for "real-time alert tracking"»
-1. Cognitive Analysis:
-   - Compare to SWIFT CSP's 99.99% uptime standard
-   - Check against EU's 10-minute STR filing mandate
-   - Identify needed integrations: KYC databases, transaction monitors
-2. Probing Sequence:
-   - "What constitutes 'real-time' in your operational context? <500ms response?"
-   - "How does this align with FINTRAC's 24-hour reporting rule?"
-   - "What fallback mechanism is needed during system outages?"
+Begin by asking a single, open-ended question about the general purpose of the project.
 `;
 
 // Helper function to create a requirements prompt with actual data
@@ -543,6 +525,49 @@ export function Chatbot({
     }
   };
 
+  // Function to export the last assistant response as BRD
+  const exportBRD = () => {
+    const assistantMessages = messages.filter(m => m.role === "assistant");
+    
+    if (assistantMessages.length === 0) {
+      alert("No assistant responses to export");
+      return;
+    }
+    
+    // Get the last assistant message
+    const lastResponse = assistantMessages[assistantMessages.length - 1].content;
+    
+    // Create a JSON object with the response
+    const brdData = {
+      timestamp: new Date().toISOString(),
+      content: lastResponse
+    };
+    
+    // Convert to JSON string
+    const jsonData = JSON.stringify(brdData, null, 2);
+    
+    // Create a Blob with the JSON data
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    
+    // Create URL for the Blob
+    const url = URL.createObjectURL(blob);
+    
+    // Create a link element to trigger download
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BRD_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    // Show notification
+    setShowExportNotification(true);
+    setTimeout(() => setShowExportNotification(false), 3000);
+  };
+
   // Full chatbot UI
   return (
     <>
@@ -576,6 +601,15 @@ export function Chatbot({
                   >
                     <FileText className="h-4 w-4" />
                     Export
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => exportBRD()} 
+                    className="flex items-center gap-1"
+                  >
+                    <FileText className="h-4 w-4" />
+                    EXPORT BRD
                   </Button>
                   <button onClick={onClose} className="p-1 rounded-full hover:bg-muted">
                     <X className="h-5 w-5" />
